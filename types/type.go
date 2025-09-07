@@ -12,6 +12,7 @@ const (
 	TypeUint16    Type = 1 //exact type could be derived from length
 	TypeUint32    Type = 1 //exact type could be derived from length
 	TypeUint64    Type = 1 //exact type could be derived from length
+	TypeContainer Type = 2
 	TypeFloat32   Type = 3
 	TypeFloat64   Type = 4
 	TypeBool      Type = 5 // instead of slice with 1 length it has its own identity
