@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"sort"
 	"sync"
 	"unsafe"
 
 	"github.com/BranchAndLink/paosp/types"
+	"github.com/BranchAndLink/paosp/utils"
 )
 
 var putAccessPool = sync.Pool{
@@ -224,11 +224,7 @@ func (p *PutAccess) AddMapSortedKeyStr(m map[string]string) {
 
 	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeMap))
 	if len(m) > 0 {
-		keys := make([]string, 0, len(m))
-		for k := range m {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
+		keys := utils.SortKeys(m)
 		nested := NewPutAccessFromPool()
 		for _, k := range keys {
 			nested.AddString(k)
@@ -243,11 +239,7 @@ func (p *PutAccess) AddMapSortedKey(m map[string][]byte) {
 
 	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeMap))
 	if len(m) > 0 {
-		keys := make([]string, 0, len(m))
-		for k := range m {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
+		keys := utils.SortKeys(m)
 		nested := NewPutAccessFromPool()
 		for _, k := range keys {
 			nested.AddString(k)
@@ -330,11 +322,7 @@ func (p *PutAccess) AddMapAnySortedKey(m map[string]any) {
 
 	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeMap))
 	if len(m) > 0 {
-		keys := make([]string, 0, len(m))
-		for k := range m {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
+		keys := utils.SortKeys(m)
 		nested := NewPutAccessFromPool()
 		for _, k := range keys {
 			nested.AddString(k)

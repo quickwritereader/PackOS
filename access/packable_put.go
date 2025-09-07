@@ -2,9 +2,9 @@ package access
 
 import (
 	"encoding/binary"
-	"sort"
 
 	"github.com/BranchAndLink/paosp/types"
+	"github.com/BranchAndLink/paosp/utils"
 )
 
 type Packable interface {
@@ -202,11 +202,7 @@ func (v PackMapPackable) PackInto(p *PutAccess) {
 type PackSortedMapPackable map[string]Packable
 
 func (v PackSortedMapPackable) PackInto(p *PutAccess) {
-	keys := make([]string, 0, len(v))
-	for k := range v {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	keys := utils.SortKeys(v)
 
 	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeMap))
 	if len(keys) > 0 {
