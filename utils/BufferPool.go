@@ -30,7 +30,8 @@ func NewBufferPool() *BufferPool {
 	for i, sz := range BufferSizeClass {
 		size := sz
 		bp.pools[i].New = func() any {
-			return make([]byte, size)
+			b := make([]byte, size)
+			return &b
 		}
 	}
 	return &bp
@@ -42,12 +43,13 @@ func (bp *BufferPool) Acquire(n int) []byte {
 	if idx < 0 {
 		return make([]byte, n)
 	}
-	buf := bp.pools[idx].Get().([]byte)
-	return buf[:n]
+	bufPtr := bp.pools[idx].Get().(*[]byte)
+	return (*bufPtr)[:n]
 }
 
 func (bp *BufferPool) AcquireDefault() []byte {
-	return bp.pools[0].Get().([]byte)
+	bufPtr := bp.pools[0].Get().(*[]byte)
+	return *bufPtr
 }
 
 func (bp *BufferPool) AcquireZeroed(n int) []byte {
@@ -64,6 +66,7 @@ func (bp *BufferPool) Release(buf []byte) {
 	}
 	idx := bits.Len(uint(c)) - 7
 	if BufferSizeClass[idx] == c {
-		bp.pools[idx].Put(buf[:c])
+		bp.pools[idx].Put(&buf)
 	}
+
 }

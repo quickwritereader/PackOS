@@ -168,30 +168,18 @@ func (v PackBytes) PackIntoUnsorted(p *PutAccess) {
 type PackMapAny map[string]any
 
 func (v PackMapAny) PackInto(p *PutAccess) {
-	p.AddMapAnySortedKey(map[string]any(v))
-}
-
-func (v PackMapAny) PackIntoUnsorted(p *PutAccess) {
 	p.AddMapAny(map[string]any(v))
 }
 
 type PackMapStr map[string]string
 
 func (v PackMapStr) PackInto(p *PutAccess) {
-	p.AddMapSortedKeyStr(map[string]string(v))
-}
-
-func (v PackMapStr) PackIntoUnsorted(p *PutAccess) {
 	p.AddMapStr(map[string]string(v))
 }
 
 type PackMapBytes map[string][]byte
 
 func (v PackMapBytes) PackInto(p *PutAccess) {
-	p.AddMapSortedKey(map[string][]byte(v))
-}
-
-func (v PackMapBytes) PackIntoUnsorted(p *PutAccess) {
 	p.AddMap(map[string][]byte(v))
 }
 
