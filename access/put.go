@@ -89,6 +89,27 @@ func (p *PutAccess) AddInt64(v int64) {
 	p.position = len(p.buf)
 }
 
+// AddUint16 packs a uint16 value.
+func (p *PutAccess) AddUint16(v uint16) {
+	p.buf = binary.LittleEndian.AppendUint16(p.buf, v)
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeUint16))
+	p.position = len(p.buf)
+}
+
+// AddUint32 packs a uint32 value.
+func (p *PutAccess) AddUint32(v uint32) {
+	p.buf = binary.LittleEndian.AppendUint32(p.buf, v)
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeUint32))
+	p.position = len(p.buf)
+}
+
+// AddUint64 packs a uint64 value.
+func (p *PutAccess) AddUint64(v uint64) {
+	p.buf = binary.LittleEndian.AppendUint64(p.buf, v)
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeUint64))
+	p.position = len(p.buf)
+}
+
 // AddFloat32 packs a float32 value
 
 func (p *PutAccess) AddFloat32(v float32) {
@@ -102,6 +123,22 @@ func (p *PutAccess) AddFloat32(v float32) {
 func (p *PutAccess) AddFloat64(v float64) {
 	p.buf = binary.LittleEndian.AppendUint64(p.buf, math.Float64bits(v))
 	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeFloat64))
+	p.position = len(p.buf)
+}
+
+// AddUint8 packs a boolean value as a single byte
+func (p *PutAccess) AddUint8(b uint8) {
+
+	p.buf = append(p.buf, byte(b))
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeUint8))
+	p.position = len(p.buf)
+}
+
+// AddInt8 packs a boolean value as a single byte
+func (p *PutAccess) AddInt8(b int8) {
+
+	p.buf = append(p.buf, byte(b))
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInt8))
 	p.position = len(p.buf)
 }
 
@@ -252,52 +289,70 @@ func (p *PutAccess) AddMapSortedKey(m map[string][]byte) {
 
 func packAnyValue(p *PutAccess, v any) {
 	switch val := v.(type) {
+	case string:
+		p.AddString(val)
+	case []byte:
+		p.AddBytes(val)
+	case map[string]string:
+		p.AddMapStr(val)
+	case uint8:
+		p.AddUint8(val)
+	case uint16:
+		p.AddUint16(val)
+	case uint32:
+		p.AddUint32(val)
+	case uint64:
+		p.AddUint64(val)
+	case int8:
+		p.AddInt8(val)
 	case int16:
 		p.AddInt16(val)
 	case int32:
 		p.AddInt32(val)
+	case int64:
+		p.AddInt64(val)
 	case float32:
 		p.AddFloat32(val)
 	case float64:
 		p.AddFloat64(val)
 	case bool:
 		p.AddBool(val)
-	case string:
-		p.AddString(val)
-	case []byte:
-		p.AddBytes(val)
 	case map[string]any:
-		p.AddMapAnySortedKey(val)
+		p.AddMapAny(val)
 	case map[string][]byte:
-		p.AddMapSortedKey(val)
+		p.AddMap(val)
 	default:
 		// Optional: panic or skip unsupported types
 		panic(fmt.Sprintf("packAnyValue: unsupported type %T", val))
 	}
 }
 
-func packAnyValueUnsorted(p *PutAccess, v any) {
+func packAnyValueSorted(p *PutAccess, v any) {
 	switch val := v.(type) {
+	case string:
+		p.AddString(val)
+	case []byte:
+		p.AddBytes(val)
+	case map[string]string:
+		p.AddMapSortedKeyStr(val)
+	case int8:
+		p.AddInt8(val)
 	case int16:
 		p.AddInt16(val)
 	case int32:
 		p.AddInt32(val)
+	case int64:
+		p.AddInt64(val)
 	case float32:
 		p.AddFloat32(val)
 	case float64:
 		p.AddFloat64(val)
 	case bool:
 		p.AddBool(val)
-	case string:
-		p.AddString(val)
-	case []byte:
-		p.AddBytes(val)
 	case map[string]any:
 		p.AddMapAny(val)
 	case map[string][]byte:
-		p.AddMap(val)
-	case map[string]string:
-		p.AddMapStr(val)
+		p.AddMapSortedKey(val)
 	default:
 		// Optional: panic or skip unsupported types
 		panic(fmt.Sprintf("packAnyValue: unsupported type %T", val))
@@ -311,7 +366,7 @@ func (p *PutAccess) AddMapAny(m map[string]any) {
 		nested := NewPutAccessFromPool()
 		for k, v := range m {
 			nested.AddString(k)
-			packAnyValueUnsorted(nested, v)
+			packAnyValue(nested, v)
 		}
 		p.appendAndReleaseNested(nested)
 	}
@@ -326,7 +381,7 @@ func (p *PutAccess) AddMapAnySortedKey(m map[string]any) {
 		nested := NewPutAccessFromPool()
 		for _, k := range keys {
 			nested.AddString(k)
-			packAnyValue(nested, m[k])
+			packAnyValueSorted(nested, m[k])
 		}
 		p.appendAndReleaseNested(nested)
 	}
