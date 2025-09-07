@@ -65,6 +65,12 @@ func NewPutAccessFromPoolZero() *PutAccess {
 	return GetPutAccessZero()
 }
 
+func (p *PutAccess) AppendTagValue(tag types.Type, val []byte) {
+	p.buf = append(p.buf, val...)
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, tag))
+	p.position = len(p.buf)
+}
+
 // AddInt16 packs an int16 value
 
 func (p *PutAccess) AddInt16(v int16) {
@@ -155,6 +161,15 @@ func (p *PutAccess) AddBool(b bool) {
 	p.position = len(p.buf)
 }
 
+func (p *PutAccess) AddNullableInt8(v *int8) {
+
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInt8))
+	if v != nil {
+		p.buf = append(p.buf, byte(*v))
+		p.position = len(p.buf)
+	}
+}
+
 func (p *PutAccess) AddNullableInt16(v *int16) {
 
 	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInt16))
@@ -178,6 +193,42 @@ func (p *PutAccess) AddNullableInt64(v *int64) {
 	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInt64))
 	if v != nil {
 		p.buf = binary.LittleEndian.AppendUint64(p.buf, uint64(*v))
+		p.position = len(p.buf)
+	}
+}
+
+func (p *PutAccess) AddNullableUint8(v *uint8) {
+
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeUint8))
+	if v != nil {
+		p.buf = append(p.buf, byte(*v))
+		p.position = len(p.buf)
+	}
+}
+
+func (p *PutAccess) AddNullableUint16(v *uint16) {
+
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInt16))
+	if v != nil {
+		p.buf = binary.LittleEndian.AppendUint16(p.buf, *v)
+		p.position = len(p.buf)
+	}
+}
+
+func (p *PutAccess) AddNullableUint32(v *uint32) {
+
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInt32))
+	if v != nil {
+		p.buf = binary.LittleEndian.AppendUint32(p.buf, *v)
+		p.position = len(p.buf)
+	}
+}
+
+func (p *PutAccess) AddNullableUint64(v *uint64) {
+
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInt64))
+	if v != nil {
+		p.buf = binary.LittleEndian.AppendUint64(p.buf, *v)
 		p.position = len(p.buf)
 	}
 }
@@ -460,4 +511,8 @@ func (p *PutAccess) PackBuff(buffer []byte) (int, error) {
 	}
 
 	return n, nil
+}
+
+func (p *PutAccess) AddPackable(v Packable) {
+	v.PackInto(p)
 }
