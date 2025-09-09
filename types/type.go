@@ -6,19 +6,11 @@ type Type uint16
 const (
 	TypeInvalid   Type = 0
 	TypeEnd       Type = 0
-	TypeInt16     Type = 1 //exact type could be derived from length
-	TypeInt32     Type = 1 //exact type could be derived from length
-	TypeInt64     Type = 1 //exact type could be derived from length
-	TypeUint16    Type = 1 //exact type could be derived from length
-	TypeUint32    Type = 1 //exact type could be derived from length
-	TypeUint64    Type = 1 //exact type could be derived from length
+	TypeInteger   Type = 1
 	TypeContainer Type = 2
-	TypeFloat32   Type = 3
-	TypeFloat64   Type = 4
-	TypeBool      Type = 5 // instead of slice with 1 length it has its own identity
-	TypeInt8      Type = 5
-	TypeUint8     Type = 5
-	TypeString    Type = 6 // used for both string and []byte
+	TypeFloating  Type = 3
+	TypeBool      Type = 5
+	TypeString    Type = 6 // used for both string and []byte small chunks
 	TypeByteArray Type = 6
 	TypeSlice     Type = 6
 	TypeMap       Type = 7
@@ -27,16 +19,16 @@ const (
 // String returns the human-readable name of the type
 func (t Type) String() string {
 	switch t {
-	case TypeInt16:
-		return "int16|int32|int64|uint16|uint32|uint64"
-	case TypeFloat32:
-		return "float32"
-	case TypeFloat64:
-		return "float64"
+	case TypeInteger:
+		return "Integer"
+	case TypeFloating:
+		return "Float"
 	case TypeBool:
-		return "bool|int8|uint8"
+		return "bool"
 	case TypeString:
 		return "string"
+	case TypeContainer:
+		return "container"
 	case TypeMap:
 		return "map"
 	default:

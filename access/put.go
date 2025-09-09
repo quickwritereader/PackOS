@@ -75,7 +75,7 @@ func (p *PutAccess) AppendTagValue(tag types.Type, val []byte) {
 
 func (p *PutAccess) AddInt16(v int16) {
 	p.buf = binary.LittleEndian.AppendUint16(p.buf, uint16(v))
-	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInt16))
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInteger))
 	p.position = len(p.buf)
 }
 
@@ -83,7 +83,7 @@ func (p *PutAccess) AddInt16(v int16) {
 
 func (p *PutAccess) AddInt32(v int32) {
 	p.buf = binary.LittleEndian.AppendUint32(p.buf, uint32(v))
-	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInt32))
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInteger))
 	p.position = len(p.buf)
 }
 
@@ -91,28 +91,28 @@ func (p *PutAccess) AddInt32(v int32) {
 
 func (p *PutAccess) AddInt64(v int64) {
 	p.buf = binary.LittleEndian.AppendUint64(p.buf, uint64(v))
-	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInt64))
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInteger))
 	p.position = len(p.buf)
 }
 
 // AddUint16 packs a uint16 value.
 func (p *PutAccess) AddUint16(v uint16) {
 	p.buf = binary.LittleEndian.AppendUint16(p.buf, v)
-	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeUint16))
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInteger))
 	p.position = len(p.buf)
 }
 
 // AddUint32 packs a uint32 value.
 func (p *PutAccess) AddUint32(v uint32) {
 	p.buf = binary.LittleEndian.AppendUint32(p.buf, v)
-	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeUint32))
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInteger))
 	p.position = len(p.buf)
 }
 
 // AddUint64 packs a uint64 value.
 func (p *PutAccess) AddUint64(v uint64) {
 	p.buf = binary.LittleEndian.AppendUint64(p.buf, v)
-	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeUint64))
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInteger))
 	p.position = len(p.buf)
 }
 
@@ -120,7 +120,7 @@ func (p *PutAccess) AddUint64(v uint64) {
 
 func (p *PutAccess) AddFloat32(v float32) {
 	p.buf = binary.LittleEndian.AppendUint32(p.buf, math.Float32bits(v))
-	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeFloat32))
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeFloating))
 	p.position = len(p.buf)
 }
 
@@ -128,7 +128,7 @@ func (p *PutAccess) AddFloat32(v float32) {
 
 func (p *PutAccess) AddFloat64(v float64) {
 	p.buf = binary.LittleEndian.AppendUint64(p.buf, math.Float64bits(v))
-	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeFloat64))
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeFloating))
 	p.position = len(p.buf)
 }
 
@@ -136,7 +136,7 @@ func (p *PutAccess) AddFloat64(v float64) {
 func (p *PutAccess) AddUint8(b uint8) {
 
 	p.buf = append(p.buf, byte(b))
-	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeUint8))
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInteger))
 	p.position = len(p.buf)
 }
 
@@ -144,7 +144,7 @@ func (p *PutAccess) AddUint8(b uint8) {
 func (p *PutAccess) AddInt8(b int8) {
 
 	p.buf = append(p.buf, byte(b))
-	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInt8))
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInteger))
 	p.position = len(p.buf)
 }
 
@@ -163,7 +163,7 @@ func (p *PutAccess) AddBool(b bool) {
 
 func (p *PutAccess) AddNullableInt8(v *int8) {
 
-	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInt8))
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInteger))
 	if v != nil {
 		p.buf = append(p.buf, byte(*v))
 		p.position = len(p.buf)
@@ -172,7 +172,7 @@ func (p *PutAccess) AddNullableInt8(v *int8) {
 
 func (p *PutAccess) AddNullableInt16(v *int16) {
 
-	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInt16))
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInteger))
 	if v != nil {
 		p.buf = binary.LittleEndian.AppendUint16(p.buf, uint16(*v))
 		p.position = len(p.buf)
@@ -181,7 +181,7 @@ func (p *PutAccess) AddNullableInt16(v *int16) {
 
 func (p *PutAccess) AddNullableInt32(v *int32) {
 
-	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInt32))
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInteger))
 	if v != nil {
 		p.buf = binary.LittleEndian.AppendUint32(p.buf, uint32(*v))
 		p.position = len(p.buf)
@@ -190,7 +190,7 @@ func (p *PutAccess) AddNullableInt32(v *int32) {
 
 func (p *PutAccess) AddNullableInt64(v *int64) {
 
-	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInt64))
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInteger))
 	if v != nil {
 		p.buf = binary.LittleEndian.AppendUint64(p.buf, uint64(*v))
 		p.position = len(p.buf)
@@ -199,7 +199,7 @@ func (p *PutAccess) AddNullableInt64(v *int64) {
 
 func (p *PutAccess) AddNullableUint8(v *uint8) {
 
-	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeUint8))
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInteger))
 	if v != nil {
 		p.buf = append(p.buf, byte(*v))
 		p.position = len(p.buf)
@@ -208,7 +208,7 @@ func (p *PutAccess) AddNullableUint8(v *uint8) {
 
 func (p *PutAccess) AddNullableUint16(v *uint16) {
 
-	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInt16))
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInteger))
 	if v != nil {
 		p.buf = binary.LittleEndian.AppendUint16(p.buf, *v)
 		p.position = len(p.buf)
@@ -217,7 +217,7 @@ func (p *PutAccess) AddNullableUint16(v *uint16) {
 
 func (p *PutAccess) AddNullableUint32(v *uint32) {
 
-	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInt32))
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInteger))
 	if v != nil {
 		p.buf = binary.LittleEndian.AppendUint32(p.buf, *v)
 		p.position = len(p.buf)
@@ -226,7 +226,7 @@ func (p *PutAccess) AddNullableUint32(v *uint32) {
 
 func (p *PutAccess) AddNullableUint64(v *uint64) {
 
-	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInt64))
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeInteger))
 	if v != nil {
 		p.buf = binary.LittleEndian.AppendUint64(p.buf, *v)
 		p.position = len(p.buf)
@@ -235,7 +235,7 @@ func (p *PutAccess) AddNullableUint64(v *uint64) {
 
 func (p *PutAccess) AddNullableFloat32(v *float32) {
 
-	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeFloat32))
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeFloating))
 	if v != nil {
 		p.buf = binary.LittleEndian.AppendUint32(p.buf, math.Float32bits(*v))
 		p.position = len(p.buf)
@@ -244,7 +244,7 @@ func (p *PutAccess) AddNullableFloat32(v *float32) {
 
 func (p *PutAccess) AddNullableFloat64(v *float64) {
 
-	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeFloat64))
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeFloating))
 	if v != nil {
 		p.buf = binary.LittleEndian.AppendUint64(p.buf, math.Float64bits(*v))
 		p.position = len(p.buf)

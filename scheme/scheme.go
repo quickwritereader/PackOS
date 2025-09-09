@@ -15,31 +15,31 @@ type Scheme interface {
 }
 type SchemeInt16 struct{}
 
-func (SchemeInt16) TypeTag() types.Type { return types.TypeInt16 }
+func (SchemeInt16) TypeTag() types.Type { return types.TypeInteger }
 func (SchemeInt16) WidthHint() int      { return 2 }
 func (SchemeInt16) HasNested() bool     { return false }
 
 type SchemeInt32 struct{}
 
-func (SchemeInt32) TypeTag() types.Type { return types.TypeInt32 }
+func (SchemeInt32) TypeTag() types.Type { return types.TypeInteger }
 func (SchemeInt32) WidthHint() int      { return 4 }
 func (SchemeInt32) HasNested() bool     { return false }
 
 type SchemeInt64 struct{}
 
-func (SchemeInt64) TypeTag() types.Type { return types.TypeInt64 }
+func (SchemeInt64) TypeTag() types.Type { return types.TypeInteger }
 func (SchemeInt64) WidthHint() int      { return 8 }
 func (SchemeInt64) HasNested() bool     { return false }
 
 type SchemeFloat32 struct{}
 
-func (SchemeFloat32) TypeTag() types.Type { return types.TypeFloat32 }
+func (SchemeFloat32) TypeTag() types.Type { return types.TypeFloating }
 func (SchemeFloat32) WidthHint() int      { return 4 }
 func (SchemeFloat32) HasNested() bool     { return false }
 
 type SchemeFloat64 struct{}
 
-func (SchemeFloat64) TypeTag() types.Type { return types.TypeFloat64 }
+func (SchemeFloat64) TypeTag() types.Type { return types.TypeFloating }
 func (SchemeFloat64) WidthHint() int      { return 8 }
 func (SchemeFloat64) HasNested() bool     { return false }
 
@@ -80,35 +80,35 @@ type Nullable interface {
 // Nullable Primitives
 type SchemeNullableInt16 struct{}
 
-func (SchemeNullableInt16) TypeTag() types.Type { return types.TypeInt16 }
+func (SchemeNullableInt16) TypeTag() types.Type { return types.TypeInteger }
 func (SchemeNullableInt16) WidthHint() int      { return 2 }
 func (SchemeNullableInt16) HasNested() bool     { return false }
 func (SchemeNullableInt16) IsNullable() bool    { return true }
 
 type SchemeNullableInt32 struct{}
 
-func (SchemeNullableInt32) TypeTag() types.Type { return types.TypeInt32 }
+func (SchemeNullableInt32) TypeTag() types.Type { return types.TypeInteger }
 func (SchemeNullableInt32) WidthHint() int      { return 4 }
 func (SchemeNullableInt32) HasNested() bool     { return false }
 func (SchemeNullableInt32) IsNullable() bool    { return true }
 
 type SchemeNullableInt64 struct{}
 
-func (SchemeNullableInt64) TypeTag() types.Type { return types.TypeInt64 }
+func (SchemeNullableInt64) TypeTag() types.Type { return types.TypeInteger }
 func (SchemeNullableInt64) WidthHint() int      { return 8 }
 func (SchemeNullableInt64) HasNested() bool     { return false }
 func (SchemeNullableInt64) IsNullable() bool    { return true }
 
 type SchemeNullableFloat32 struct{}
 
-func (SchemeNullableFloat32) TypeTag() types.Type { return types.TypeFloat32 }
+func (SchemeNullableFloat32) TypeTag() types.Type { return types.TypeFloating }
 func (SchemeNullableFloat32) WidthHint() int      { return 4 }
 func (SchemeNullableFloat32) HasNested() bool     { return false }
 func (SchemeNullableFloat32) IsNullable() bool    { return true }
 
 type SchemeNullableFloat64 struct{}
 
-func (SchemeNullableFloat64) TypeTag() types.Type { return types.TypeFloat64 }
+func (SchemeNullableFloat64) TypeTag() types.Type { return types.TypeFloating }
 func (SchemeNullableFloat64) WidthHint() int      { return 8 }
 func (SchemeNullableFloat64) HasNested() bool     { return false }
 func (SchemeNullableFloat64) IsNullable() bool    { return true }
