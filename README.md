@@ -1,5 +1,5 @@
-# PackOS
-PackOS is a binary packing protocol with offset-indexed framing, designed for fast composition, random access, and reliable for  RPC or BadgerDB workloads with **small blobs(<8kb)**(the size limitation maybe lifted to make it suitable for all purpose) 
+# packos
+packos is a binary packing protocol with offset-indexed framing, designed for fast composition, random access, and reliable for  RPC or BadgerDB workloads with **small blobs(<8kb)**(the size limitation maybe lifted to make it suitable for all purpose) 
 It supports:
 All packing paths emit canonical headers, preserve offset domains, and support recursive structures. PAOSP ensures schema validation, GC neutrality, and reproducible output across variants.
 
@@ -11,18 +11,22 @@ Supports single-pass traversal with offset tracking and teardown-safe accessors.
 Enables direct lookup via offset domains without full unpacking.
 - [x] Recursive structure support
 Handles nested maps, slices, and tagged frames with offset provenance.
-- [ ] Simple schema validation
+- [x] Simple schema validation
 Validates type tags, offsets, and structure boundaries during decode.
 - [x] GC neutrality
 Avoids retained slices and ensures allocation discipline across packing paths.
 - [x] Reproducible output
 Guarantees stable binary layout across runs and variants.
+- [ ] General-purpose container support
+Supports arbitrarily large maps, slices, and tagged frames without size limits.
+- [ ] Generate big and nested complex structures above 8kb limit
+
 
 ## Example
 
 
 ```go
-put := paosp.NewPutAccessFromPool()
+put := packos.NewPutAccessFromPool()
 put.AddInt16(42)                 // 2 bytes
 put.AddBool(true)                // 1 byte
 put.AddString("go")              // 2-byte length + 2 bytes
@@ -47,7 +51,7 @@ expected := []byte{
 }
 ```
 
-```
+```go
 actual := Pack(
 	PackInt16(12345),
 	PackMapSorted{
@@ -96,4 +100,40 @@ expected := []byte{
 	'g', 'o', 'p', 'h', 'e', 'r',	
 }
 
+```
+
+```go
+actual := pack.Pack(
+	pack.PackInt16(12345),
+	pack.PackFloat32(3.14),
+	pack.PackInt64(9876543210),
+	pack.PackBool(true),
+	pack.PackMapSorted{
+		"meta": pack.PackMapSorted{
+			"user": pack.PackByteArray([]byte("alice")),
+			"role": pack.PackByteArray([]byte("admin")),
+		},
+		"name": pack.PackString("gopher"),
+	},
+)
+
+chain := SChain(
+	SInt16(),
+	SFloat32(),
+	SInt64(),
+	SBool(),
+	SMapSorted(
+		SStringExact("meta"), // key
+		SMapSorted(           // → value
+			SStringExact("role"), // key
+			SBytes(len("admin")), // → value
+			SStringExact("user"),
+			SBytes(len("alice")),
+		),
+		SStringExact("name"),   // key
+		SString(len("gopher")), // → value
+	),
+)
+
+err := ValidateBuffer(actual, chain)
 ```

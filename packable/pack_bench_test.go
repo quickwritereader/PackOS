@@ -8,7 +8,7 @@ import (
 var sinkFlat []byte
 
 func BenchmarkFlatFields_NewPaospPackableComputBench2(b *testing.B) {
-	const count = 1000
+	const count = 10000
 	x := map[string]string{
 		"user":  "alice",
 		"role":  "admin",

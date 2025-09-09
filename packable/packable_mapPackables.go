@@ -1,9 +1,9 @@
 package packable
 
 import (
-	"github.com/BranchAndLink/paosp/access"
-	"github.com/BranchAndLink/paosp/types"
-	"github.com/BranchAndLink/paosp/utils"
+	"github.com/BranchAndLink/packos/access"
+	"github.com/BranchAndLink/packos/types"
+	"github.com/BranchAndLink/packos/utils"
 )
 
 // PackMapSorted packs a map of Packable values after sorting its keys.
@@ -119,6 +119,84 @@ func (p PackMapStr) Write(buf []byte, pos int) int {
 	//correct first arg with absolute
 	_ = access.WriteTypeHeader(buf, first, headerSize, types.TypeString)
 	_ = access.WriteTypeHeader(buf, posH, pos-delta_start, types.TypeEnd)
+	return pos
+}
+
+// PackMapStrInt32 packs a map of int32 values. This is the unsorted version.
+type PackMapStrInt32 map[string]int32
+
+// ValueSize returns the size of the packed map's content.
+func (p PackMapStrInt32) ValueSize() int {
+	size := 0
+	for k := range p {
+		size += len(k)
+	}
+	size += len(p)*(2*access.HeaderTagSize+4) + access.HeaderTagSize
+	return size
+}
+
+// HeaderType returns the type of the header for a map.
+func (p PackMapStrInt32) HeaderType() types.Type {
+	return types.TypeMap
+}
+
+// Write packs the map into a byte buffer. This version does not sort keys.
+func (p PackMapStrInt32) Write(buf []byte, pos int) int {
+	headerSize := len(p)*2*access.HeaderTagSize + access.HeaderTagSize
+	first := pos
+	posH := pos
+	pos += headerSize
+	deltaStart := pos
+
+	for k, v := range p {
+		posH = access.WriteTypeHeader(buf, posH, pos-deltaStart, types.TypeString)
+		pos = access.WriteString(buf, pos, k)
+
+		posH = access.WriteTypeHeader(buf, posH, pos-deltaStart, types.TypeInteger)
+		pos = access.WriteInt32(buf, pos, v)
+	}
+
+	_ = access.WriteTypeHeader(buf, first, headerSize, types.TypeString)
+	_ = access.WriteTypeHeader(buf, posH, pos-deltaStart, types.TypeEnd)
+	return pos
+}
+
+// PackMapStrInt64 packs a map of int64 values. This is the unsorted version.
+type PackMapStrInt64 map[string]int64
+
+// ValueSize returns the size of the packed map's content.
+func (p PackMapStrInt64) ValueSize() int {
+	size := 0
+	for k := range p {
+		size += len(k)
+	}
+	size += len(p)*(2*access.HeaderTagSize+8) + access.HeaderTagSize
+	return size
+}
+
+// HeaderType returns the type of the header for a map.
+func (p PackMapStrInt64) HeaderType() types.Type {
+	return types.TypeMap
+}
+
+// Write packs the map into a byte buffer. This version does not sort keys.
+func (p PackMapStrInt64) Write(buf []byte, pos int) int {
+	headerSize := len(p)*2*access.HeaderTagSize + access.HeaderTagSize
+	first := pos
+	posH := pos
+	pos += headerSize
+	deltaStart := pos
+
+	for k, v := range p {
+		posH = access.WriteTypeHeader(buf, posH, pos-deltaStart, types.TypeString)
+		pos = access.WriteString(buf, pos, k)
+
+		posH = access.WriteTypeHeader(buf, posH, pos-deltaStart, types.TypeInteger)
+		pos = access.WriteInt64(buf, pos, v)
+	}
+
+	_ = access.WriteTypeHeader(buf, first, headerSize, types.TypeString)
+	_ = access.WriteTypeHeader(buf, posH, pos-deltaStart, types.TypeEnd)
 	return pos
 }
 

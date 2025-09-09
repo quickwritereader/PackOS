@@ -7,7 +7,7 @@ import (
 	"math"
 	"unsafe"
 
-	"github.com/BranchAndLink/paosp/types"
+	"github.com/BranchAndLink/packos/types"
 )
 
 type GetAccess struct {
@@ -65,22 +65,6 @@ func (g *GetAccess) GetBool(pos int) (bool, error) {
 	return g.buf[start] != 0, nil
 }
 
-func (g *GetAccess) GetInt8(pos int) (int8, error) {
-	tp, start, end := g.rangeAt(pos)
-	if tp != types.TypeInt8 || end-start != 1 {
-		return 0, errors.New("decode error")
-	}
-	return int8(g.buf[start]), nil
-}
-
-func (g *GetAccess) GetUint8(pos int) (uint8, error) {
-	tp, start, end := g.rangeAt(pos)
-	if tp != types.TypeUint8 || end-start != 1 {
-		return 0, errors.New("decode error")
-	}
-	return g.buf[start], nil
-}
-
 func (g *GetAccess) GetNullableBool(pos int) (*bool, error) {
 	tp, start, end := g.rangeAt(pos)
 	if end-start == 0 {
@@ -93,12 +77,28 @@ func (g *GetAccess) GetNullableBool(pos int) (*bool, error) {
 	return &v, nil
 }
 
+func (g *GetAccess) GetInt8(pos int) (int8, error) {
+	tp, start, end := g.rangeAt(pos)
+	if tp != types.TypeInteger || end-start != 1 {
+		return 0, errors.New("decode error")
+	}
+	return int8(g.buf[start]), nil
+}
+
+func (g *GetAccess) GetUint8(pos int) (uint8, error) {
+	tp, start, end := g.rangeAt(pos)
+	if tp != types.TypeInteger || end-start != 1 {
+		return 0, errors.New("decode error")
+	}
+	return g.buf[start], nil
+}
+
 func (g *GetAccess) GetNullableInt8(pos int) (*int8, error) {
 	tp, start, end := g.rangeAt(pos)
 	if end-start == 0 {
 		return nil, nil
 	}
-	if tp != types.TypeInt8 || end-start != 1 {
+	if tp != types.TypeInteger || end-start != 1 {
 		return nil, errors.New("decode error")
 	}
 	v := int8(g.buf[start])
@@ -110,18 +110,18 @@ func (g *GetAccess) GetNullableUint8(pos int) (*uint8, error) {
 	if end-start == 0 {
 		return nil, nil
 	}
-	if tp != types.TypeUint8 || end-start != 1 {
+	if tp != types.TypeInteger || end-start != 1 {
 		return nil, errors.New("decode error")
 	}
 	v := g.buf[start]
 	return &v, nil
 }
 
-func (g *GetAccess) GetInt(pos int) (int64, int, error) {
+func (g *GetAccess) GetInt(pos int) (any, int, error) {
 	tp, start, end := g.rangeAt(pos)
 	size := end - start
 
-	if tp != types.TypeBool && tp != types.TypeInt16 {
+	if tp != types.TypeInteger {
 		return 0, 0, fmt.Errorf("GetInt decode error: not integer type")
 	}
 
@@ -129,13 +129,13 @@ func (g *GetAccess) GetInt(pos int) (int64, int, error) {
 	case 0:
 		return 0, 0, nil // nil value
 	case 1:
-		v := int64(g.buf[start:end][0])
+		v := int8(g.buf[start:end][0])
 		return v, 1, nil
 	case 2:
-		v := int64(binary.LittleEndian.Uint16(g.buf[start:end]))
+		v := int16(binary.LittleEndian.Uint16(g.buf[start:end]))
 		return v, 2, nil
 	case 4:
-		v := int64(binary.LittleEndian.Uint32(g.buf[start:end]))
+		v := int32(binary.LittleEndian.Uint32(g.buf[start:end]))
 		return v, 4, nil
 	case 8:
 		v := int64(binary.LittleEndian.Uint64(g.buf[start:end]))
@@ -145,10 +145,34 @@ func (g *GetAccess) GetInt(pos int) (int64, int, error) {
 	}
 }
 
+func (g *GetAccess) GetFloating(pos int) (any, int, error) {
+	tp, start, end := g.rangeAt(pos)
+	size := end - start
+
+	if tp != types.TypeFloating {
+		return 0, 0, fmt.Errorf("GetInt decode error: not floating type")
+	}
+
+	switch size {
+	case 0:
+		return 0, 0, nil // nil value
+	case 4:
+		bits := binary.LittleEndian.Uint32(g.buf[start:end])
+		v := math.Float32frombits(bits)
+		return v, 4, nil
+	case 8:
+		bits := binary.LittleEndian.Uint64(g.buf[start:end])
+		v := math.Float64frombits(bits)
+		return v, 8, nil
+	default:
+		return 0, 0, fmt.Errorf("GetInt decode error: unsupported size %d at pos %d", size, pos)
+	}
+}
+
 // GetUint16 decodes a uint16 at position pos
 func (g *GetAccess) GetUint16(pos int) (uint16, error) {
 	tp, start, end := g.rangeAt(pos)
-	if tp != types.TypeUint16 || end-start != 2 {
+	if tp != types.TypeInteger || end-start != 2 {
 		return 0, errors.New("decode error")
 	}
 	return binary.LittleEndian.Uint16(g.buf[start:end]), nil
@@ -157,7 +181,7 @@ func (g *GetAccess) GetUint16(pos int) (uint16, error) {
 // GetUint32 decodes a uint32 at position pos
 func (g *GetAccess) GetUint32(pos int) (uint32, error) {
 	tp, start, end := g.rangeAt(pos)
-	if tp != types.TypeUint32 || end-start != 4 {
+	if tp != types.TypeInteger || end-start != 4 {
 		return 0, errors.New("decode error")
 	}
 	return binary.LittleEndian.Uint32(g.buf[start:end]), nil
@@ -166,7 +190,7 @@ func (g *GetAccess) GetUint32(pos int) (uint32, error) {
 // GetUint64 decodes a uint64 at position pos
 func (g *GetAccess) GetUint64(pos int) (uint64, error) {
 	tp, start, end := g.rangeAt(pos)
-	if tp != types.TypeUint64 || end-start != 8 {
+	if tp != types.TypeInteger || end-start != 8 {
 		return 0, errors.New("decode error")
 	}
 	return binary.LittleEndian.Uint64(g.buf[start:end]), nil
@@ -192,7 +216,7 @@ func (g *GetAccess) GetNullableUint16(pos int) (*uint16, error) {
 	if end-start == 0 {
 		return nil, nil
 	}
-	if tp != types.TypeUint16 || end-start != 2 {
+	if tp != types.TypeInteger || end-start != 2 {
 		return nil, errors.New("decode error")
 	}
 	v := binary.LittleEndian.Uint16(g.buf[start:end])
@@ -204,7 +228,7 @@ func (g *GetAccess) GetNullableUint32(pos int) (*uint32, error) {
 	if end-start == 0 {
 		return nil, nil
 	}
-	if tp != types.TypeUint32 || end-start != 4 {
+	if tp != types.TypeInteger || end-start != 4 {
 		return nil, errors.New("decode error")
 	}
 	v := binary.LittleEndian.Uint32(g.buf[start:end])
@@ -216,7 +240,7 @@ func (g *GetAccess) GetNullableUint64(pos int) (*uint64, error) {
 	if end-start == 0 {
 		return nil, nil
 	}
-	if tp != types.TypeUint64 || end-start != 8 {
+	if tp != types.TypeInteger || end-start != 8 {
 		return nil, errors.New("decode error")
 	}
 	v := binary.LittleEndian.Uint64(g.buf[start:end])
@@ -228,7 +252,7 @@ func (g *GetAccess) GetNullableInt16(pos int) (*int16, error) {
 	if end-start == 0 {
 		return nil, nil
 	}
-	if tp != types.TypeInt16 || end-start != 2 {
+	if tp != types.TypeInteger || end-start != 2 {
 		return nil, errors.New("decode error")
 	}
 	v := int16(binary.LittleEndian.Uint16(g.buf[start:end]))
@@ -240,7 +264,7 @@ func (g *GetAccess) GetNullableInt32(pos int) (*int32, error) {
 	if end-start == 0 {
 		return nil, nil
 	}
-	if tp != types.TypeInt32 || end-start != 4 {
+	if tp != types.TypeInteger || end-start != 4 {
 		return nil, errors.New("decode error")
 	}
 	v := int32(binary.LittleEndian.Uint32(g.buf[start:end]))
@@ -252,7 +276,7 @@ func (g *GetAccess) GetNullableInt64(pos int) (*int64, error) {
 	if end-start == 0 {
 		return nil, nil
 	}
-	if tp != types.TypeInt64 || end-start != 8 {
+	if tp != types.TypeInteger || end-start != 8 {
 		return nil, errors.New("decode error")
 	}
 	v := int64(binary.LittleEndian.Uint64(g.buf[start:end]))
@@ -262,7 +286,7 @@ func (g *GetAccess) GetNullableInt64(pos int) (*int64, error) {
 // GetFloat32 decodes a float32 at position pos
 func (g *GetAccess) GetFloat32(pos int) (float32, error) {
 	tp, start, end := g.rangeAt(pos)
-	if tp != types.TypeFloat32 || end-start != 4 {
+	if tp != types.TypeFloating || end-start != 4 {
 		return 0, errors.New("decode error")
 	}
 	bits := binary.LittleEndian.Uint32(g.buf[start:end])
@@ -272,7 +296,7 @@ func (g *GetAccess) GetFloat32(pos int) (float32, error) {
 // GetFloat64 decodes a float64 at position pos
 func (g *GetAccess) GetFloat64(pos int) (float64, error) {
 	tp, start, end := g.rangeAt(pos)
-	if tp != types.TypeFloat64 || end-start != 8 {
+	if tp != types.TypeFloating || end-start != 8 {
 		return 0, errors.New("decode error")
 	}
 	bits := binary.LittleEndian.Uint64(g.buf[start:end])
@@ -285,7 +309,7 @@ func (g *GetAccess) GetNullableFloat32(pos int) (*float32, error) {
 	if end-start == 0 {
 		return nil, nil
 	}
-	if tp != types.TypeFloat32 || end-start != 4 {
+	if tp != types.TypeFloating || end-start != 4 {
 		return nil, errors.New("decode error")
 	}
 	bits := binary.LittleEndian.Uint32(g.buf[start:end])
@@ -299,7 +323,7 @@ func (g *GetAccess) GetNullableFloat64(pos int) (*float64, error) {
 	if end-start == 0 {
 		return nil, nil
 	}
-	if tp != types.TypeFloat64 || end-start != 8 {
+	if tp != types.TypeFloating || end-start != 8 {
 		return nil, errors.New("decode error")
 	}
 	bits := binary.LittleEndian.Uint64(g.buf[start:end])
@@ -334,12 +358,12 @@ func (g *GetAccess) GetStringUnsafe(pos int) (string, error) {
 	return unsafe.String(&g.buf[start], end-start), nil
 }
 
-func unpackAnyValue(g *GetAccess, pos int) (any, error) {
+func GetAny(g *GetAccess, pos int) (any, error) {
 	h := binary.LittleEndian.Uint16(g.buf[pos*2:])
 	_, typ := types.DecodeHeader(h)
 
 	switch typ {
-	case types.TypeInt16:
+	case types.TypeInteger:
 		v, size, err := g.GetInt(pos)
 		if err != nil {
 			return nil, err
@@ -349,12 +373,15 @@ func unpackAnyValue(g *GetAccess, pos int) (any, error) {
 		}
 		return v, nil
 
-	case types.TypeFloat32:
-		return g.GetNullableFloat32(pos)
-
-	case types.TypeFloat64:
-		return g.GetNullableFloat64(pos)
-
+	case types.TypeFloating:
+		v, size, err := g.GetFloating(pos)
+		if err != nil {
+			return nil, err
+		}
+		if size == 0 {
+			return nil, nil
+		}
+		return v, nil
 	case types.TypeString:
 		return g.GetString(pos)
 
@@ -362,7 +389,7 @@ func unpackAnyValue(g *GetAccess, pos int) (any, error) {
 		return g.GetMapAny(pos)
 
 	default:
-		return nil, fmt.Errorf("unpackAnyValue: unsupported type tag %d at pos %d", typ, pos)
+		return nil, fmt.Errorf("GetAny: unsupported type tag %d at pos %d", typ, pos)
 	}
 }
 
@@ -383,7 +410,7 @@ func (g *GetAccess) GetMapAny(pos int) (map[string]any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("map key decode error at %d: %w", i, err)
 		}
-		val, err := unpackAnyValue(nested, i+1)
+		val, err := GetAny(nested, i+1)
 		if err != nil {
 			return nil, fmt.Errorf("map value decode error at %d: %w", i+1, err)
 		}

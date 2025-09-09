@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"math"
 
-	"github.com/BranchAndLink/paosp/types"
+	"github.com/BranchAndLink/packos/types"
 )
 
 const HeaderTagSize = 2

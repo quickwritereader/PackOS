@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/BranchAndLink/paosp/access"
+	"github.com/BranchAndLink/packos/access"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

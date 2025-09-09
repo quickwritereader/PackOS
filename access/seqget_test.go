@@ -3,7 +3,7 @@ package access
 import (
 	"testing"
 
-	"github.com/BranchAndLink/paosp/types"
+	"github.com/BranchAndLink/packos/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -52,7 +52,7 @@ func TestSeqGetAccess_UnpacksNestedMap(t *testing.T) {
 	// Field 0: Int16
 	payload, typ, err := seq.Next()
 	require.NoError(t, err)
-	assert.Equal(t, types.TypeInt16, typ)
+	assert.Equal(t, types.TypeInteger, typ)
 	assert.Equal(t, []byte{0x39, 0x30}, payload)
 
 	// Field 1: Map
@@ -122,7 +122,7 @@ func TestSeqGetAccess_ExplicitByteMatch(t *testing.T) {
 	// Field 0: Int16
 	payload, typ, err := seq.Next()
 	require.NoError(t, err)
-	assert.Equal(t, types.TypeInt16, typ)
+	assert.Equal(t, types.TypeInteger, typ)
 	assert.Equal(t, []byte{0x2A, 0x00}, payload)
 
 	// Field 1: Bool
