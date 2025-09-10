@@ -22,10 +22,11 @@ Supports arbitrarily large maps, slices, and tagged frames without size limits.
 - [ ] Generate big and nested complex structures above 8kb limit
 
 
-## Example
+## Encoding Example
 
 
 ```go
+
 put := packos.NewPutAccessFromPool()
 put.AddInt16(42)                 // 2 bytes
 put.AddBool(true)                // 1 byte
@@ -102,6 +103,7 @@ expected := []byte{
 
 ```
 
+## Scheme examples
 ```go
 actual := pack.Pack(
 	pack.PackInt16(12345),
@@ -118,21 +120,84 @@ actual := pack.Pack(
 )
 
 chain := SChain(
-	SInt16(),
-	SFloat32(),
-	SInt64(),
-	SBool(),
-	SMapSorted(
+	SInt16,
+	SFloat32,
+	SInt64,
+	SBool,
+	//will match in written order
+	SMap(
 		SStringExact("meta"), // key
-		SMapSorted(           // → value
+		SMap(                     // → value
 			SStringExact("role"), // key
 			SBytes(len("admin")), // → value
 			SStringExact("user"),
 			SBytes(len("alice")),
 		),
 		SStringExact("name"),   // key
-		SString(len("gopher")), // → value
+		SStringLen(len("gopher")), // → value
 	),
+)
+
+err := ValidateBuffer(actual, chain)
+
+```
+```go
+actual := pack.Pack(
+	pack.PackInt16(12345),
+	pack.PackFloat32(3.14),
+	pack.PackInt64(9876543210),
+	pack.PackBool(true),
+	pack.PackMapSorted{
+		"meta": pack.PackMapSorted{
+			"user": pack.PackByteArray([]byte("alice")), // valid
+			"role": pack.PackString("admin"),            // valid
+			"age":  pack.PackInt32(30),                  // valid
+		},
+		"name": pack.PackString("gopher"), // valid
+	},
+)
+
+chain := SChain(
+	SInt16,
+	SFloat32,
+	SInt64,
+	SBool,
+	SMap(
+		SString.Match("meta"),
+		SMapUnordered(map[string]Scheme{
+			"age":  SInt32.Range(18, 99),               // declared first
+			"user": SBytes(len("alice")),               // declared second
+			"role": SString.Pattern(`^(admin|guest)$`), // declared third
+		}),
+		SString.Match("name"),
+		SString.WithWidth(len("gopher")),
+	),
+)
+
+err := ValidateBuffer(actual, chain)
+```
+
+```go
+
+import . "github.com/BranchAndLink/packos/packable"
+
+/////////////////////////////////////////////////////
+
+
+actual := Pack(
+	PackString("2025-09-10"),        // date
+	PackInt32(42),                   // range
+	PackString("alice@example.com"), // email
+	PackString("prefix-hello"),      // prefix
+	PackString("world-suffix"),      // suffix
+)
+
+chain := SChain(
+	SString.Pattern(`^\d{4}-\d{2}-\d{2}$`),                              // date pattern YYYY-MM-DD
+	SInt32.Range(1, 100),                                                // int range
+	SString.Pattern(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`), // email
+	SString.Prefix("prefix-"),                                           // prefix match
+	SString.Suffix("-suffix"),                                           // suffix match
 )
 
 err := ValidateBuffer(actual, chain)
