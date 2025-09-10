@@ -1,9 +1,9 @@
 package packable
 
 import (
-	"github.com/BranchAndLink/packos/access"
-	"github.com/BranchAndLink/packos/types"
-	"github.com/BranchAndLink/packos/utils"
+	"github.com/quickwritereader/PackOS/access"
+	"github.com/quickwritereader/PackOS/types"
+	"github.com/quickwritereader/PackOS/utils"
 )
 
 // PackMapSorted packs a map of Packable values after sorting its keys.
@@ -205,7 +205,7 @@ func (pack PackMap) PackInto(p *access.PutAccess) {
 	buffer := bPool.Acquire(size)
 	pos := 0
 	pos = pack.Write(buffer, pos)
-	p.AppendTagValue(types.TypeMap, buffer[:pos])
+	p.AppendTagAndValue(types.TypeMap, buffer[:pos])
 	bPool.Release(buffer)
 }
 
@@ -214,7 +214,7 @@ func (pack PackMapSorted) PackInto(p *access.PutAccess) {
 	buffer := bPool.Acquire(size)
 	pos := 0
 	pos = pack.Write(buffer, pos)
-	p.AppendTagValue(types.TypeMap, buffer[:pos])
+	p.AppendTagAndValue(types.TypeMap, buffer[:pos])
 	bPool.Release(buffer)
 }
 
@@ -223,6 +223,6 @@ func (pack PackMapStr) PackInto(p *access.PutAccess) {
 	buffer := bPool.Acquire(size)
 	pos := 0
 	pos = pack.Write(buffer, pos)
-	p.AppendTagValue(types.TypeMap, buffer[:pos])
+	p.AppendTagAndValue(types.TypeMap, buffer[:pos])
 	bPool.Release(buffer)
 }

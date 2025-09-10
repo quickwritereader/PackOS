@@ -3,7 +3,7 @@ package access
 import (
 	"testing"
 
-	"github.com/BranchAndLink/packos/types"
+	"github.com/quickwritereader/PackOS/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

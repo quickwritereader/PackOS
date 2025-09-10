@@ -3,7 +3,7 @@ package scheme
 import (
 	"testing"
 
-	pack "github.com/BranchAndLink/packos/packable"
+	pack "github.com/quickwritereader/PackOS/packable"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -177,4 +177,35 @@ func TestValidateChain_DateEmailPrefixSuffix_Success(t *testing.T) {
 
 	err := ValidateBuffer(actual, chain)
 	assert.NoError(t, err, "Validation should succeed with correct date, range, email, prefix, and suffix")
+}
+
+func TestValidatePackedTuples(t *testing.T) {
+	actual := pack.Pack(
+		pack.PackTuple(
+			pack.PackInt32(2025),
+			pack.PackBool(false),
+			pack.PackString("az"),
+		),
+		pack.PackTuple(
+			pack.PackInt16(7),
+			pack.PackBool(true),
+			pack.PackString("go"),
+		),
+	)
+
+	chain := SChain(
+		STuple(
+			SInt32,
+			SBool,
+			SStringLen(len("az")),
+		),
+		STuple(
+			SInt16,
+			SBool,
+			SStringLen(len("go")),
+		),
+	)
+
+	err := ValidateBuffer(actual, chain)
+	assert.NoError(t, err, "Validation should succeed for two packed tuples")
 }

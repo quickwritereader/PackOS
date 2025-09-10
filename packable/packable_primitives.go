@@ -1,8 +1,8 @@
 package packable
 
 import (
-	"github.com/BranchAndLink/packos/access"
-	"github.com/BranchAndLink/packos/types"
+	"github.com/quickwritereader/PackOS/access"
+	"github.com/quickwritereader/PackOS/types"
 )
 
 // PackInt8 implements the Packable interface for int8.

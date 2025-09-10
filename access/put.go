@@ -8,8 +8,8 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/BranchAndLink/packos/types"
-	"github.com/BranchAndLink/packos/utils"
+	"github.com/quickwritereader/PackOS/types"
+	"github.com/quickwritereader/PackOS/utils"
 )
 
 var putAccessPool = sync.Pool{
@@ -65,7 +65,7 @@ func NewPutAccessFromPoolZero() *PutAccess {
 	return GetPutAccessZero()
 }
 
-func (p *PutAccess) AppendTagValue(tag types.Type, val []byte) {
+func (p *PutAccess) AppendTagAndValue(tag types.Type, val []byte) {
 	p.buf = append(p.buf, val...)
 	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, tag))
 	p.position = len(p.buf)
@@ -130,6 +130,32 @@ func (p *PutAccess) AddFloat64(v float64) {
 	p.buf = binary.LittleEndian.AppendUint64(p.buf, math.Float64bits(v))
 	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeFloating))
 	p.position = len(p.buf)
+}
+
+// AddNumeric chooses the smallest fitting integer type if v is integral,
+// otherwise stores it as a float64.
+func (p *PutAccess) AddNumeric(v float64) {
+	// Check if v has no fractional part
+	if v == math.Trunc(v) {
+		i := int64(v)
+		switch {
+		case i >= math.MinInt8 && i <= math.MaxInt8:
+			p.AddInt8(int8(i))
+			return
+		case i >= math.MinInt16 && i <= math.MaxInt16:
+			p.AddInt16(int16(i))
+			return
+		case i >= math.MinInt32 && i <= math.MaxInt32:
+			p.AddInt32(int32(i))
+			return
+		default:
+			p.AddInt64(i)
+			return
+		}
+	}
+
+	// Otherwise, treat as float
+	p.AddFloat64(v)
 }
 
 // AddUint8 packs a boolean value as a single byte
@@ -294,6 +320,76 @@ func (p *PutAccess) AddMap(m map[string][]byte) {
 
 }
 
+// AddStringArray packs a []string as a tuple
+func (p *PutAccess) AddStringArray(arr []string) {
+	// use tuple for local array for now
+	p.offsets = binary.LittleEndian.AppendUint16(
+		p.offsets,
+		types.EncodeHeader(p.position, types.TypeTuple),
+	)
+
+	if len(arr) == 0 {
+		return
+	}
+
+	nested := NewPutAccessFromPool()
+	for _, s := range arr {
+		nested.AddString(s)
+	}
+	p.appendAndReleaseNested(nested)
+}
+
+func (p *PutAccess) AddAnyTuple(m []interface{}, useNumeric bool) error {
+	// encode tuple header
+	p.offsets = binary.LittleEndian.AppendUint16(
+		p.offsets,
+		types.EncodeHeader(p.position, types.TypeTuple),
+	)
+
+	if len(m) == 0 {
+		return nil
+	}
+
+	nested := NewPutAccessFromPool()
+	for _, elem := range m {
+		if err := packAnyValue(nested, elem, useNumeric); err != nil {
+			return fmt.Errorf("AddAnyTuple: element %T: %w", elem, err)
+		}
+	}
+	p.appendAndReleaseNested(nested)
+	return nil
+}
+
+func (p *PutAccess) AddAnyTupleSortedMap(m []interface{}, useNumeric bool) error {
+	// encode tuple header
+	p.offsets = binary.LittleEndian.AppendUint16(
+		p.offsets,
+		types.EncodeHeader(p.position, types.TypeTuple),
+	)
+
+	if len(m) == 0 {
+		return nil
+	}
+
+	nested := NewPutAccessFromPool()
+	for _, elem := range m {
+		if err := packAnyValueSortedMap(nested, elem, useNumeric); err != nil {
+			return fmt.Errorf("AddAnyTupleSortedMap: element %T: %w", elem, err)
+		}
+	}
+	p.appendAndReleaseNested(nested)
+	return nil
+}
+
+func (p *PutAccess) AddNull(m []interface{}) {
+	// encode tuple header
+	p.offsets = binary.LittleEndian.AppendUint16(
+		p.offsets,
+		types.EncodeHeader(p.position, types.TypeNull),
+	)
+
+}
+
 func (p *PutAccess) AddMapStr(m map[string]string) {
 
 	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeMap))
@@ -338,8 +434,13 @@ func (p *PutAccess) AddMapSortedKey(m map[string][]byte) {
 
 }
 
-func packAnyValue(p *PutAccess, v any) {
+// packAnyValue encodes a generic value into PutAccess.
+// Returns an error if the type is unsupported.
+func packAnyValue(p *PutAccess, v any, useNumeric bool) error {
+	var err error = nil
 	switch val := v.(type) {
+	case nil:
+		p.AddNull(nil)
 	case string:
 		p.AddString(val)
 	case []byte:
@@ -365,21 +466,37 @@ func packAnyValue(p *PutAccess, v any) {
 	case float32:
 		p.AddFloat32(val)
 	case float64:
-		p.AddFloat64(val)
+		if useNumeric {
+			p.AddNumeric(val)
+		} else {
+			p.AddFloat64(val)
+		}
 	case bool:
 		p.AddBool(val)
 	case map[string]any:
-		p.AddMapAny(val)
+		p.AddMapAny(val, useNumeric)
 	case map[string][]byte:
 		p.AddMap(val)
+	case []string:
+		p.AddStringArray(val)
+	case []interface{}:
+		err = p.AddAnyTuple(val, useNumeric)
+	case Packable:
+		val.PackInto(p)
 	default:
-		// Optional: panic or skip unsupported types
-		panic(fmt.Sprintf("packAnyValue: unsupported type %T", val))
+		return fmt.Errorf("packAnyValue: invalid type %T", val)
 	}
+	return err
 }
 
-func packAnyValueSorted(p *PutAccess, v any) {
+// packAnyValueSortedMap encodes a generic value into PutAccess,
+// using sorted map variants where applicable.
+// Returns an error if the type is unsupported.
+func packAnyValueSortedMap(p *PutAccess, v any, useNumeric bool) error {
+	var err error = nil
 	switch val := v.(type) {
+	case nil:
+		p.AddNull(nil)
 	case string:
 		p.AddString(val)
 	case []byte:
@@ -397,46 +514,64 @@ func packAnyValueSorted(p *PutAccess, v any) {
 	case float32:
 		p.AddFloat32(val)
 	case float64:
-		p.AddFloat64(val)
+		if useNumeric {
+			p.AddNumeric(val)
+		} else {
+			p.AddFloat64(val)
+		}
 	case bool:
 		p.AddBool(val)
 	case map[string]any:
-		p.AddMapAny(val)
+		p.AddMapAny(val, useNumeric)
 	case map[string][]byte:
 		p.AddMapSortedKey(val)
+	case Packable:
+		val.PackInto(p)
+	case []interface{}:
+		err = p.AddAnyTupleSortedMap(val, useNumeric)
 	default:
-		// Optional: panic or skip unsupported types
-		panic(fmt.Sprintf("packAnyValue: unsupported type %T", val))
+		return fmt.Errorf("packAnyValueSortedMap: invalid type %T", val)
 	}
+	return err
 }
 
-func (p *PutAccess) AddMapAny(m map[string]any) {
+func (p *PutAccess) AddMapAny(m map[string]any, useNumeric bool) error {
+	p.offsets = binary.LittleEndian.AppendUint16(
+		p.offsets,
+		types.EncodeHeader(p.position, types.TypeMap),
+	)
 
-	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeMap))
 	if len(m) > 0 {
 		nested := NewPutAccessFromPool()
 		for k, v := range m {
 			nested.AddString(k)
-			packAnyValue(nested, v)
+			if err := packAnyValue(nested, v, useNumeric); err != nil {
+				return fmt.Errorf("AddMapAny: key %q: %w", k, err)
+			}
 		}
 		p.appendAndReleaseNested(nested)
 	}
-
+	return nil
 }
 
-func (p *PutAccess) AddMapAnySortedKey(m map[string]any) {
+func (p *PutAccess) AddMapAnySortedKey(m map[string]any, useNumeric bool) error {
+	p.offsets = binary.LittleEndian.AppendUint16(
+		p.offsets,
+		types.EncodeHeader(p.position, types.TypeMap),
+	)
 
-	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeMap))
 	if len(m) > 0 {
 		keys := utils.SortKeys(m)
 		nested := NewPutAccessFromPool()
 		for _, k := range keys {
 			nested.AddString(k)
-			packAnyValueSorted(nested, m[k])
+			if err := packAnyValueSortedMap(nested, m[k], useNumeric); err != nil {
+				return fmt.Errorf("AddMapAnySortedKey: key %q: %w", k, err)
+			}
 		}
 		p.appendAndReleaseNested(nested)
 	}
-
+	return nil
 }
 
 func (p *PutAccess) appendAndReleaseNested(nested *PutAccess) {
@@ -457,7 +592,7 @@ func (p *PutAccess) Pack() []byte {
 	payloadBase := headerSize
 	// Overwrite first header with absolute payload base
 	hdr := types.EncodeHeader(payloadBase, types.Type(p.offsets[0]&0x07))
-	p.offsets[0] = byte(hdr)
+	binary.LittleEndian.PutUint16(p.offsets, hdr)
 	// Allocate final buffer: headers + payload
 	final := make([]byte, headerSize+len(p.buf))
 	// Write headers
@@ -475,7 +610,7 @@ func (p *PutAccess) PackAppend(buf []byte) []byte {
 	payloadBase := headerSize
 	// Overwrite first header with absolute payload base
 	hdr := types.EncodeHeader(payloadBase, types.Type(p.offsets[0]&0x07))
-	p.offsets[0] = byte(hdr)
+	binary.LittleEndian.PutUint16(p.offsets, hdr)
 
 	// Append headers
 	buf = append(buf, p.offsets...)
@@ -498,7 +633,7 @@ func (p *PutAccess) PackBuff(buffer []byte) (int, error) {
 	payloadBase := headerSize
 	// Overwrite first header with absolute payload base
 	hdr := types.EncodeHeader(payloadBase, types.Type(p.offsets[0]&0x07))
-	p.offsets[0] = byte(hdr)
+	binary.LittleEndian.PutUint16(p.offsets, hdr)
 	n := copy(buffer, p.offsets)
 	// Write payload
 	// Copy payload if there's room
