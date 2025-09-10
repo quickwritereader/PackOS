@@ -1,4 +1,4 @@
-module github.com/BranchAndLink/paosp
+module github.com/BranchAndLink/packos
 
 go 1.21
 

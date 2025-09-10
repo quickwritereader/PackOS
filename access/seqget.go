@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/BranchAndLink/paosp/types"
+	"github.com/BranchAndLink/packos/types"
 )
 
 type SeqGetAccess struct {
@@ -52,6 +52,10 @@ func (s *SeqGetAccess) ArgCount() int {
 
 func (s *SeqGetAccess) UnderlineBuffer() []byte {
 	return s.buf
+}
+
+func (s *SeqGetAccess) CurrentIndex() int {
+	return s.pos
 }
 
 func (s *SeqGetAccess) PeekTypeWidth() (types.Type, int, error) {

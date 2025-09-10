@@ -1,7 +1,7 @@
 package access
 
 import (
-	"github.com/BranchAndLink/paosp/types"
+	"github.com/BranchAndLink/packos/types"
 )
 
 // ⚠️ Allocation Warning:

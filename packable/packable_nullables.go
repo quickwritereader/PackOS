@@ -1,8 +1,8 @@
 package packable
 
 import (
-	"github.com/BranchAndLink/paosp/access"
-	"github.com/BranchAndLink/paosp/types"
+	"github.com/BranchAndLink/packos/access"
+	"github.com/BranchAndLink/packos/types"
 )
 
 func PackNullableInt8(v *int8) PackableNullableInt8          { return PackableNullableInt8{V: v} }

@@ -1,9 +1,9 @@
 package packable
 
 import (
-	"github.com/BranchAndLink/paosp/access"
-	"github.com/BranchAndLink/paosp/types"
-	"github.com/BranchAndLink/paosp/utils"
+	"github.com/BranchAndLink/packos/access"
+	"github.com/BranchAndLink/packos/types"
+	"github.com/BranchAndLink/packos/utils"
 )
 
 // PackMapSorted packs a map of Packable values after sorting its keys.
