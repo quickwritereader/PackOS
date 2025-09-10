@@ -252,7 +252,7 @@ func SVariableMap(nested ...Scheme) Scheme {
 func ValidateBuffer(buf []byte, args ...Scheme) error {
 	seq, err := access.NewSeqGetAccess(buf)
 	if err != nil {
-		return fmt.Errorf("ValidateBuffer: failed to initialize accessor")
+		return fmt.Errorf("ValidateBuffer: failed to initialize accessor: %w", err)
 	}
 	state := ValidationState{Seq: seq}
 	for _, scheme := range args {
