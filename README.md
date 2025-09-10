@@ -51,7 +51,7 @@ expected := []byte{
 }
 ```
 
-```
+```go
 actual := Pack(
 	PackInt16(12345),
 	PackMapSorted{
@@ -102,7 +102,7 @@ expected := []byte{
 
 ```
 
-```
+```go
 actual := pack.Pack(
 	pack.PackInt16(12345),
 	pack.PackFloat32(3.14),
