@@ -205,7 +205,7 @@ func (pack PackMap) PackInto(p *access.PutAccess) {
 	buffer := bPool.Acquire(size)
 	pos := 0
 	pos = pack.Write(buffer, pos)
-	p.AppendTagValue(types.TypeMap, buffer[:pos])
+	p.AppendTagAndValue(types.TypeMap, buffer[:pos])
 	bPool.Release(buffer)
 }
 
@@ -214,7 +214,7 @@ func (pack PackMapSorted) PackInto(p *access.PutAccess) {
 	buffer := bPool.Acquire(size)
 	pos := 0
 	pos = pack.Write(buffer, pos)
-	p.AppendTagValue(types.TypeMap, buffer[:pos])
+	p.AppendTagAndValue(types.TypeMap, buffer[:pos])
 	bPool.Release(buffer)
 }
 
@@ -223,6 +223,6 @@ func (pack PackMapStr) PackInto(p *access.PutAccess) {
 	buffer := bPool.Acquire(size)
 	pos := 0
 	pos = pack.Write(buffer, pos)
-	p.AppendTagValue(types.TypeMap, buffer[:pos])
+	p.AppendTagAndValue(types.TypeMap, buffer[:pos])
 	bPool.Release(buffer)
 }

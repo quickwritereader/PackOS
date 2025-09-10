@@ -618,3 +618,66 @@ func (s SchemeMapUnordered) Validate(state ValidationState) ValidationState {
 	}
 	return state
 }
+
+type TupleScheme struct {
+	Schema   []Scheme
+	Width    int
+	Nullable bool
+}
+
+func STuple(schema ...Scheme) TupleScheme {
+	return TupleScheme{Schema: schema, Nullable: true}
+}
+
+func (s TupleScheme) IsNullable() bool {
+	return s.Nullable
+}
+
+func (s TupleScheme) Validate(state ValidationState) ValidationState {
+	if state.Err != nil {
+		return state
+	}
+
+	pos := state.Seq.CurrentIndex()
+	typ, width, err := state.Seq.PeekTypeWidth()
+	if err != nil {
+		state.Err = fmt.Errorf("ValidateBuffer: peek failed at pos %d: %w", pos, err)
+		return state
+	}
+
+	if typ != types.TypeTuple {
+		state.Err = fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected %v, got %v", pos, types.TypeTuple, typ)
+		return state
+	}
+
+	nullable := s.IsNullable()
+	hint := s.Width
+	if hint >= 0 && width != hint {
+		if !(nullable && (hint == 0 || hint == -1 || width == 0)) {
+			state.Err = fmt.Errorf("ValidateBuffer: width mismatch at pos %d — expected %d, got %d", pos, hint, width)
+			return state
+		}
+	}
+
+	sub, err := state.Seq.PeekNestedSeq()
+	if err != nil {
+		state.Err = fmt.Errorf("ValidateBuffer: nested peek failed at pos %d: %w", pos, err)
+		return state
+	}
+
+	subState := ValidationState{Seq: sub}
+	for _, sch := range s.Schema {
+		subState = sch.Validate(subState)
+		if subState.Err != nil {
+			state.Err = fmt.Errorf("ValidateBuffer: nested validation failed at pos %d: %w", pos, subState.Err)
+			return state
+		}
+	}
+
+	if err := state.Seq.Advance(); err != nil {
+		state.Err = fmt.Errorf("ValidateBuffer: advance failed at pos %d: %w", pos, err)
+		return state
+	}
+
+	return state
+}

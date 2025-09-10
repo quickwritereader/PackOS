@@ -92,8 +92,8 @@ func (s *SeqGetAccess) Advance() error {
 }
 
 func (s *SeqGetAccess) PeekNestedSeq() (*SeqGetAccess, error) {
-	if s.currentType != types.TypeMap {
-		return nil, fmt.Errorf("peekNestedSeq: current type is not Map (got %v)", s.currentType)
+	if s.currentType != types.TypeMap && s.currentType != types.TypeTuple {
+		return nil, fmt.Errorf("peekNestedSeq: current type is not Map or Tuple (got %v)", s.currentType)
 	}
 
 	width := s.nextOffset - s.currentOffset

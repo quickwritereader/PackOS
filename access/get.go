@@ -444,3 +444,14 @@ func (g *GetAccess) GetMapStr(pos int) (map[string]string, error) {
 	}
 	return out, nil
 }
+
+func (g *GetAccess) GetNestedGetAccess(pos int) (*GetAccess, types.Type, error) {
+	tp, start, end := g.rangeAt(pos)
+	if end < start || (tp != types.TypeMap && tp != types.TypeTuple) {
+		return nil, tp, errors.New("decode error: it's not nested type")
+	}
+	if end == start {
+		return nil, tp, nil // nil map
+	}
+	return NewGetAccess(g.buf[start:end]), tp, nil
+}

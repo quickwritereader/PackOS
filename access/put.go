@@ -65,7 +65,7 @@ func NewPutAccessFromPoolZero() *PutAccess {
 	return GetPutAccessZero()
 }
 
-func (p *PutAccess) AppendTagValue(tag types.Type, val []byte) {
+func (p *PutAccess) AppendTagAndValue(tag types.Type, val []byte) {
 	p.buf = append(p.buf, val...)
 	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, tag))
 	p.position = len(p.buf)
@@ -372,6 +372,8 @@ func packAnyValue(p *PutAccess, v any) {
 		p.AddMapAny(val)
 	case map[string][]byte:
 		p.AddMap(val)
+	case Packable:
+		val.PackInto(p)
 	default:
 		// Optional: panic or skip unsupported types
 		panic(fmt.Sprintf("packAnyValue: unsupported type %T", val))
@@ -404,6 +406,8 @@ func packAnyValueSorted(p *PutAccess, v any) {
 		p.AddMapAny(val)
 	case map[string][]byte:
 		p.AddMapSortedKey(val)
+	case Packable:
+		val.PackInto(p)
 	default:
 		// Optional: panic or skip unsupported types
 		panic(fmt.Sprintf("packAnyValue: unsupported type %T", val))

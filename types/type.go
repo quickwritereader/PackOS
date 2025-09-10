@@ -4,16 +4,18 @@ package types
 type Type uint16
 
 const (
-	TypeInvalid   Type = 0
-	TypeEnd       Type = 0
-	TypeInteger   Type = 1
-	TypeContainer Type = 2
-	TypeFloating  Type = 3
-	TypeBool      Type = 5
-	TypeString    Type = 6 // used for both string and []byte small chunks
-	TypeByteArray Type = 6
-	TypeSlice     Type = 6
-	TypeMap       Type = 7
+	TypeInvalid              Type = 0
+	TypeEnd                  Type = 0
+	TypeUnk                  Type = 0 // actually, can be used as arg position is not determined by it
+	TypeInteger              Type = 1
+	TypeExtendedTagContainer Type = 2
+	TypeFloating             Type = 3
+	TypeTuple                Type = 4
+	TypeBool                 Type = 5
+	TypeString               Type = 6 // used for both string and []byte small chunks
+	TypeByteArray            Type = 6
+	TypeSlice                Type = 6
+	TypeMap                  Type = 7
 )
 
 // String returns the human-readable name of the type
@@ -27,8 +29,10 @@ func (t Type) String() string {
 		return "bool"
 	case TypeString:
 		return "string"
-	case TypeContainer:
-		return "container"
+	case TypeExtendedTagContainer:
+		return "extended_container"
+	case TypeTuple:
+		return "tuple"
 	case TypeMap:
 		return "map"
 	default:
