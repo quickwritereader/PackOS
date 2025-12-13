@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"math"
 
-	"github.com/quickwritereader/packos/types"
+	"github.com/quickwritereader/PackOS/types"
 )
 
 const HeaderTagSize = 2

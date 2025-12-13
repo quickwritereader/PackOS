@@ -6,9 +6,9 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/quickwritereader/packos/access"
-	"github.com/quickwritereader/packos/types"
-	"github.com/quickwritereader/packos/utils"
+	"github.com/quickwritereader/PackOS/access"
+	"github.com/quickwritereader/PackOS/types"
+	"github.com/quickwritereader/PackOS/utils"
 )
 
 type ValidationState struct {

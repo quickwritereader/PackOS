@@ -1,5 +1,5 @@
-# packos
-packos is a binary packing protocol with offset-indexed framing, designed for fast composition, random access, and reliable for  RPC or BadgerDB workloads with **small blobs(<8kb)**(the size limitation maybe lifted to make it suitable for all purpose) 
+# PackOS
+PackOS is a binary packing protocol with offset-indexed framing, designed for fast composition, random access, and reliable for  RPC or BadgerDB workloads with **small blobs(<8kb)**(the size limitation maybe lifted to make it suitable for all purpose) 
 It supports:
 All packing paths emit canonical headers, preserve offset domains, and support recursive structures. PAOSP ensures schema validation, GC neutrality, and reproducible output across variants.
 
@@ -27,7 +27,7 @@ Supports arbitrarily large maps, slices, and tagged frames without size limits.
 
 ```go
 
-put := packos.NewPutAccessFromPool()
+put := PackOS.NewPutAccessFromPool()
 put.AddInt16(42)                 // 2 bytes
 put.AddBool(true)                // 1 byte
 put.AddString("go")              // 2-byte length + 2 bytes
@@ -219,7 +219,7 @@ err := ValidateBuffer(actual, chain)
 
 ```go
 
-import . "github.com/quickwritereader/packos/packable"
+import . "github.com/quickwritereader/PackOS/packable"
 
 /////////////////////////////////////////////////////
 

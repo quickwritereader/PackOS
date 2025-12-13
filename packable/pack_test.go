@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/quickwritereader/packos/access"
+	"github.com/quickwritereader/PackOS/access"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

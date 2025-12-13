@@ -1,8 +1,8 @@
 package packable
 
 import (
-	"github.com/quickwritereader/packos/access"
-	"github.com/quickwritereader/packos/types"
+	"github.com/quickwritereader/PackOS/access"
+	"github.com/quickwritereader/PackOS/types"
 )
 
 func PackNullableInt8(v *int8) PackableNullableInt8          { return PackableNullableInt8{V: v} }

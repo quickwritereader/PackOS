@@ -8,8 +8,8 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/quickwritereader/packos/types"
-	"github.com/quickwritereader/packos/utils"
+	"github.com/quickwritereader/PackOS/types"
+	"github.com/quickwritereader/PackOS/utils"
 )
 
 var putAccessPool = sync.Pool{
