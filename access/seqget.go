@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/BranchAndLink/packos/types"
+	"github.com/quickwritereader/packos/types"
 )
 
 type SeqGetAccess struct {

@@ -3,7 +3,7 @@ package scheme
 import (
 	"testing"
 
-	pack "github.com/BranchAndLink/packos/packable"
+	pack "github.com/quickwritereader/packos/packable"
 	"github.com/stretchr/testify/assert"
 )
 

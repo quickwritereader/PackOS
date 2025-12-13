@@ -1,7 +1,7 @@
 package access
 
 import (
-	"github.com/BranchAndLink/packos/types"
+	"github.com/quickwritereader/packos/types"
 )
 
 // ⚠️ Allocation Warning:

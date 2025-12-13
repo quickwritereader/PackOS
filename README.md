@@ -219,7 +219,7 @@ err := ValidateBuffer(actual, chain)
 
 ```go
 
-import . "github.com/BranchAndLink/packos/packable"
+import . "github.com/quickwritereader/packos/packable"
 
 /////////////////////////////////////////////////////
 

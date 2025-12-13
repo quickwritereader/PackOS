@@ -7,7 +7,7 @@ import (
 	"math"
 	"unsafe"
 
-	"github.com/BranchAndLink/packos/types"
+	"github.com/quickwritereader/packos/types"
 )
 
 type GetAccess struct {

@@ -1,9 +1,9 @@
 package packable
 
 import (
-	"github.com/BranchAndLink/packos/access"
-	"github.com/BranchAndLink/packos/types"
-	"github.com/BranchAndLink/packos/utils"
+	"github.com/quickwritereader/packos/access"
+	"github.com/quickwritereader/packos/types"
+	"github.com/quickwritereader/packos/utils"
 )
 
 // PackMapSorted packs a map of Packable values after sorting its keys.

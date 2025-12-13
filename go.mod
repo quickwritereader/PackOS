@@ -1,4 +1,4 @@
-module github.com/BranchAndLink/packos
+module github.com/quickwritereader/packos
 
 go 1.21
 

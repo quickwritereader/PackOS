@@ -1,8 +1,8 @@
 package packable
 
 import (
-	"github.com/BranchAndLink/packos/access"
-	"github.com/BranchAndLink/packos/types"
+	"github.com/quickwritereader/packos/access"
+	"github.com/quickwritereader/packos/types"
 )
 
 type Tuple struct {
