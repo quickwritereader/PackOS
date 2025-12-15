@@ -11,6 +11,7 @@ const (
 	TypeExtendedTagContainer Type = 2
 	TypeFloating             Type = 3
 	TypeTuple                Type = 4
+	TypeNull                 Type = 4
 	TypeBool                 Type = 5
 	TypeString               Type = 6 // used for both string and []byte small chunks
 	TypeByteArray            Type = 6

@@ -83,11 +83,14 @@ func (s *SeqGetAccess) Advance() error {
 	s.currentOffset = s.nextOffset
 	s.currentType = s.nextType
 	//get next type if is exist
-	h := binary.LittleEndian.Uint16(s.buf[(s.pos+1)*2:])
-	end, nt := types.DecodeHeader(h)
-	end += s.base
-	s.nextOffset = end
-	s.nextType = nt
+	if s.currentType != types.TypeEnd {
+		h := binary.LittleEndian.Uint16(s.buf[(s.pos+1)*2:])
+		end, nt := types.DecodeHeader(h)
+		end += s.base
+		s.nextOffset = end
+		s.nextType = nt
+	}
+
 	return nil
 }
 
@@ -125,4 +128,19 @@ func (s *SeqGetAccess) Next() ([]byte, types.Type, error) {
 	}
 
 	return payload, typ, nil
+}
+
+func (s *SeqGetAccess) NextOffsetWidth() (int, int, types.Type, error) {
+	typ, width, err := s.PeekTypeWidth()
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("next: peek failed at pos %d: %w", s.pos, err)
+	}
+	if width < 0 || s.currentOffset+width > len(s.buf) {
+		return 0, 0, 0, fmt.Errorf("next: invalid range %d → %d", s.currentOffset, s.currentOffset+width)
+	}
+	if err := s.Advance(); err != nil {
+		return 0, 0, 0, fmt.Errorf("next: advance failed at pos %d: %w", s.pos, err)
+	}
+
+	return s.currentOffset, s.currentOffset + width, typ, nil
 }

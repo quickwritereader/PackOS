@@ -578,6 +578,9 @@ func (s SchemeMapUnordered) Validate(state ValidationState) ValidationState {
 
 	for {
 		keyPayload, keyType, err := subState.Seq.Next()
+		if keyType == types.TypeEnd {
+			break
+		}
 		if err != nil {
 			if keyType == types.TypeEnd {
 				break

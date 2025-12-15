@@ -85,7 +85,7 @@ func TestPutAccess_IntThenMapWithInnerMapAndString(t *testing.T) {
 			"role": []byte("admin"),
 		},
 		"name": "gopher",
-	})
+	}, false)
 
 	expected := []byte{
 		// Outer Header Block (base = 0)

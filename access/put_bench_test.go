@@ -284,7 +284,7 @@ func BenchmarkPutAccess_PackNested_Paosp(b *testing.B) {
 		for j := 0; j < count; j++ {
 			put := NewPutAccessFromPool()
 			put.AddInt16(12345)
-			put.AddMapAny(x)
+			put.AddMapAny(x, false)
 			sinkManual = put.Pack()
 			ReleasePutAccess(put)
 		}
