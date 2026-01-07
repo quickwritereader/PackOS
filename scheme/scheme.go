@@ -11,85 +11,78 @@ import (
 	"github.com/quickwritereader/PackOS/utils"
 )
 
-type ValidationState struct {
-	Seq *access.SeqGetAccess
-	Err error
-}
-
 type Scheme interface {
-	Validate(state ValidationState) ValidationState
+	Validate(seq *access.SeqGetAccess) error
 }
 
-type SchemeFunc func(state ValidationState) ValidationState
+type SchemeFunc func(seq *access.SeqGetAccess) error
 
-func (f SchemeFunc) Validate(state ValidationState) ValidationState {
-	return f(state)
+func (f SchemeFunc) Validate(seq *access.SeqGetAccess) error {
+	return f(seq)
 }
 
 type SchemeAny struct{}
 
-func (s SchemeAny) Validate(state ValidationState) ValidationState {
-	if state.Err != nil {
-		return state
+func (s SchemeAny) Validate(seq *access.SeqGetAccess) error {
+
+	if err := seq.Advance(); err != nil {
+		return fmt.Errorf("ValidateBuffer: failed to skip value: %w", err)
 	}
-	if err := state.Seq.Advance(); err != nil {
-		state.Err = fmt.Errorf("ValidateBuffer: failed to skip value: %w", err)
-	}
-	return state
+	return nil
 }
 
 type SchemeBool struct{}
 
-func (SchemeBool) Validate(state ValidationState) ValidationState {
-	return validatePrimitive(state, types.TypeBool, 1, false)
+func (SchemeBool) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, types.TypeBool, 1, false)
 }
 
 type SchemeInt8 struct{}
 
-func (SchemeInt8) Validate(state ValidationState) ValidationState {
-	return validatePrimitive(state, types.TypeInteger, 2, false)
+func (SchemeInt8) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, types.TypeInteger, 2, false)
 }
 
 type SchemeInt16 struct{}
 
-func (SchemeInt16) Validate(state ValidationState) ValidationState {
-	return validatePrimitive(state, types.TypeInteger, 2, false)
+func (SchemeInt16) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, types.TypeInteger, 2, false)
 }
 
 type SchemeInt32 struct{}
 
-func (SchemeInt32) Validate(state ValidationState) ValidationState {
-	return validatePrimitive(state, types.TypeInteger, 4, false)
+func (SchemeInt32) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, types.TypeInteger, 4, false)
 }
 
 type SchemeInt64 struct{}
 
-func (SchemeInt64) Validate(state ValidationState) ValidationState {
-	return validatePrimitive(state, types.TypeInteger, 8, false)
+func (SchemeInt64) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, types.TypeInteger, 8, false)
 }
 
 type SchemeFloat32 struct{}
 
-func (SchemeFloat32) Validate(state ValidationState) ValidationState {
-	return validatePrimitive(state, types.TypeFloating, 4, false)
+func (SchemeFloat32) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, types.TypeFloating, 4, false)
 }
 
 type SchemeFloat64 struct{}
 
-func (SchemeFloat64) Validate(state ValidationState) ValidationState {
-	return validatePrimitive(state, types.TypeFloating, 8, false)
+func (SchemeFloat64) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, types.TypeFloating, 8, false)
 }
 
 type SchemeString struct{ Width int }
 
-func (s SchemeString) Validate(state ValidationState) ValidationState {
-	return validatePrimitive(state, types.TypeString, s.Width, s.IsNullable())
+func (s SchemeString) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, types.TypeString, s.Width, s.IsNullable())
 }
 
 type SchemeBytes struct{ Width int }
 
-func (s SchemeBytes) Validate(state ValidationState) ValidationState {
-	return validatePrimitive(state, types.TypeString, s.Width, s.IsNullable())
+func (s SchemeBytes) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, types.TypeString, s.Width, s.IsNullable())
 }
 
 // NOTE: SchemeMap expects keys in sorted order.
@@ -99,54 +92,47 @@ type SchemeMap struct {
 	Schema []Scheme
 }
 
-func (s SchemeMap) Validate(state ValidationState) ValidationState {
-	if state.Err != nil {
-		return state
-	}
-	pos := state.Seq.CurrentIndex()
-	typ, width, err := state.Seq.PeekTypeWidth()
+func (s SchemeMap) Validate(seq *access.SeqGetAccess) error {
+
+	pos := seq.CurrentIndex()
+	typ, width, err := seq.PeekTypeWidth()
 	if err != nil {
-		state.Err = fmt.Errorf("ValidateBuffer: peek failed at pos %d: %w", pos, err)
-		return state
+		return fmt.Errorf("ValidateBuffer: peek failed at pos %d: %w", pos, err)
+
 	}
 	if typ != types.TypeMap {
-		state.Err = fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected %v, got %v", pos, types.TypeMap, typ)
-		return state
+		return fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected %v, got %v", pos, types.TypeMap, typ)
 	}
 	nullable := s.IsNullable()
 	hint := s.Width
 	if hint >= 0 && width != hint {
 		if !(nullable && (hint == 0 || hint == -1 || width == 0)) {
-			state.Err = fmt.Errorf("ValidateBuffer: width mismatch at pos %d — expected %d, got %d", pos, hint, width)
-			return state
+			return fmt.Errorf("ValidateBuffer: width mismatch at pos %d — expected %d, got %d", pos, hint, width)
 		}
 	}
-	sub, err := state.Seq.PeekNestedSeq()
+	sub, err := seq.PeekNestedSeq()
 	if err != nil {
-		state.Err = fmt.Errorf("ValidateBuffer: nested peek failed at pos %d: %w", pos, err)
-		return state
+		return fmt.Errorf("ValidateBuffer: nested peek failed at pos %d: %w", pos, err)
 	}
-	subState := ValidationState{Seq: sub}
+	subState := sub
 	for _, sch := range s.Schema {
-		subState = sch.Validate(subState)
-		if subState.Err != nil {
-			state.Err = fmt.Errorf("ValidateBuffer: nested validation failed at pos %d: %w", pos, subState.Err)
-			return state
+		subStateErr := sch.Validate(subState)
+		if subStateErr != nil {
+			return fmt.Errorf("ValidateBuffer: nested validation failed at pos %d: %w", pos, subStateErr)
 		}
 	}
-	if err := state.Seq.Advance(); err != nil {
-		state.Err = fmt.Errorf("ValidateBuffer: advance failed at pos %d: %w", pos, err)
-		return state
+	if err := seq.Advance(); err != nil {
+		return fmt.Errorf("ValidateBuffer: advance failed at pos %d: %w", pos, err)
 	}
-	return state
+	return nil
 }
 
 type SchemeTypeOnly struct {
 	Tag types.Type
 }
 
-func (s SchemeTypeOnly) Validate(state ValidationState) ValidationState {
-	return validatePrimitive(state, s.Tag, -1, false)
+func (s SchemeTypeOnly) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, s.Tag, -1, false)
 }
 
 type Nullable interface {
@@ -157,44 +143,44 @@ type Nullable interface {
 
 type SchemeNullableBool struct{}
 
-func (SchemeNullableBool) Validate(state ValidationState) ValidationState {
-	return validatePrimitive(state, types.TypeBool, 1, true)
+func (SchemeNullableBool) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, types.TypeBool, 1, true)
 }
 
 type SchemeNullableInt8 struct{}
 
-func (SchemeNullableInt8) Validate(state ValidationState) ValidationState {
-	return validatePrimitive(state, types.TypeInteger, 2, true)
+func (SchemeNullableInt8) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, types.TypeInteger, 2, true)
 }
 
 type SchemeNullableInt16 struct{}
 
-func (SchemeNullableInt16) Validate(state ValidationState) ValidationState {
-	return validatePrimitive(state, types.TypeInteger, 2, true)
+func (SchemeNullableInt16) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, types.TypeInteger, 2, true)
 }
 
 type SchemeNullableInt32 struct{}
 
-func (SchemeNullableInt32) Validate(state ValidationState) ValidationState {
-	return validatePrimitive(state, types.TypeInteger, 4, true)
+func (SchemeNullableInt32) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, types.TypeInteger, 4, true)
 }
 
 type SchemeNullableInt64 struct{}
 
-func (SchemeNullableInt64) Validate(state ValidationState) ValidationState {
-	return validatePrimitive(state, types.TypeInteger, 8, true)
+func (SchemeNullableInt64) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, types.TypeInteger, 8, true)
 }
 
 type SchemeNullableFloat32 struct{}
 
-func (SchemeNullableFloat32) Validate(state ValidationState) ValidationState {
-	return validatePrimitive(state, types.TypeFloating, 4, true)
+func (SchemeNullableFloat32) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, types.TypeFloating, 4, true)
 }
 
 type SchemeNullableFloat64 struct{}
 
-func (SchemeNullableFloat64) Validate(state ValidationState) ValidationState {
-	return validatePrimitive(state, types.TypeFloating, 8, true)
+func (SchemeNullableFloat64) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, types.TypeFloating, 8, true)
 }
 
 // All others default to non-nullable
@@ -268,42 +254,36 @@ func ValidateBuffer(buf []byte, args ...Scheme) error {
 	if err != nil {
 		return fmt.Errorf("ValidateBuffer: failed to initialize accessor: %w", err)
 	}
-	state := ValidationState{Seq: seq}
+
 	for _, scheme := range args {
-		state = scheme.Validate(state)
-		if state.Err != nil {
-			return state.Err
+		err = scheme.Validate(seq)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
 // Helper for primitive validation
-func validatePrimitive(state ValidationState, tag types.Type, hint int, nullable bool) ValidationState {
-	if state.Err != nil {
-		return state
-	}
-	pos := state.Seq.CurrentIndex()
-	typ, width, err := state.Seq.PeekTypeWidth()
+func validatePrimitive(seq *access.SeqGetAccess, tag types.Type, hint int, nullable bool) error {
+
+	pos := seq.CurrentIndex()
+	typ, width, err := seq.PeekTypeWidth()
 	if err != nil {
-		state.Err = fmt.Errorf("ValidateBuffer: peek failed at pos %d: %w", pos, err)
-		return state
+		return fmt.Errorf("ValidateBuffer: peek failed at pos %d: %w", pos, err)
 	}
 	if typ != tag {
-		state.Err = fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected %v, got %v", pos, tag, typ)
-		return state
+		return fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected %v, got %v", pos, tag, typ)
 	}
 	if hint >= 0 && width != hint {
 		if !(nullable && (hint == 0 || hint == -1 || width == 0)) {
-			state.Err = fmt.Errorf("ValidateBuffer: width mismatch at pos %d — expected %d, got %d", pos, hint, width)
-			return state
+			return fmt.Errorf("ValidateBuffer: width mismatch at pos %d — expected %d, got %d", pos, hint, width)
 		}
 	}
-	if err := state.Seq.Advance(); err != nil {
-		state.Err = fmt.Errorf("ValidateBuffer: advance failed at pos %d: %w", pos, err)
-		return state
+	if err := seq.Advance(); err != nil {
+		return fmt.Errorf("ValidateBuffer: advance failed at pos %d: %w", pos, err)
 	}
-	return state
+	return nil
 }
 
 type SchemeChain struct {
@@ -315,14 +295,14 @@ func SChain(schemes ...Scheme) SchemeChain {
 }
 
 // Validate applies each Scheme in sequence, short-circuiting on error
-func (sc SchemeChain) Validate(state ValidationState) ValidationState {
+func (sc SchemeChain) Validate(seq *access.SeqGetAccess) error {
 	for _, s := range sc.Schemes {
-		state = s.Validate(state)
-		if state.Err != nil {
-			return state
+		err := s.Validate(seq)
+		if err != nil {
+			return err
 		}
 	}
-	return state
+	return nil
 }
 
 func SStringExact(expected string) Scheme {
@@ -334,71 +314,53 @@ func SStringLen(width int) Scheme {
 }
 
 func (s SchemeString) Match(expected string) Scheme {
-	return SchemeFunc(func(state ValidationState) ValidationState {
-		if state.Err != nil {
-			return state
-		}
-		pos := state.Seq.CurrentIndex()
-		payload, typ, err := state.Seq.Next()
+	return SchemeFunc(func(seq *access.SeqGetAccess) error {
+		pos := seq.CurrentIndex()
+		payload, typ, err := seq.Next()
 		if err != nil {
-			state.Err = fmt.Errorf("ValidateBuffer: next failed at pos %d: %w", pos, err)
-			return state
+			return fmt.Errorf("ValidateBuffer: next failed at pos %d: %w", pos, err)
 		}
 		if typ != types.TypeString {
-			state.Err = fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected TypeString, got %v", pos, typ)
-			return state
+			return fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected TypeString, got %v", pos, typ)
 		}
 		if string(payload) != expected {
-			state.Err = fmt.Errorf("ValidateBuffer: string mismatch at pos %d — expected '%s', got '%s'", pos, expected, string(payload))
-			return state
+			return fmt.Errorf("ValidateBuffer: string mismatch at pos %d — expected '%s', got '%s'", pos, expected, string(payload))
 		}
-		return state
+		return nil
 	})
 }
 
 func (s SchemeString) Prefix(prefix string) Scheme {
-	return SchemeFunc(func(state ValidationState) ValidationState {
-		if state.Err != nil {
-			return state
-		}
-		pos := state.Seq.CurrentIndex()
-		payload, typ, err := state.Seq.Next()
+	return SchemeFunc(func(seq *access.SeqGetAccess) error {
+		pos := seq.CurrentIndex()
+		payload, typ, err := seq.Next()
 		if err != nil {
-			state.Err = fmt.Errorf("ValidateBuffer: next failed at pos %d: %w", pos, err)
-			return state
+			return fmt.Errorf("ValidateBuffer: next failed at pos %d: %w", pos, err)
 		}
 		if typ != types.TypeString {
-			state.Err = fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected TypeString, got %v", pos, typ)
-			return state
+			return fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected TypeString, got %v", pos, typ)
 		}
 		if !utils.HasPrefix(payload, prefix) {
-			state.Err = fmt.Errorf("ValidateBuffer: prefix mismatch at pos %d — expected prefix '%s', got '%s'", pos, prefix, string(payload))
-			return state
+			return fmt.Errorf("ValidateBuffer: prefix mismatch at pos %d — expected prefix '%s', got '%s'", pos, prefix, string(payload))
 		}
-		return state
+		return nil
 	})
 }
 
 func (s SchemeString) Suffix(suffix string) Scheme {
-	return SchemeFunc(func(state ValidationState) ValidationState {
-		if state.Err != nil {
-			return state
-		}
-		pos := state.Seq.CurrentIndex()
-		payload, typ, err := state.Seq.Next()
+	return SchemeFunc(func(seq *access.SeqGetAccess) error {
+		pos := seq.CurrentIndex()
+		payload, typ, err := seq.Next()
 		if err != nil {
-			state.Err = fmt.Errorf("ValidateBuffer: next failed at pos %d: %w", pos, err)
-			return state
+			return fmt.Errorf("ValidateBuffer: next failed at pos %d: %w", pos, err)
 		}
 		if typ != types.TypeString {
-			state.Err = fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected TypeString, got %v", pos, typ)
-			return state
+			return fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected TypeString, got %v", pos, typ)
 		}
 		if !utils.HasSuffix(payload, suffix) {
-			state.Err = fmt.Errorf("ValidateBuffer: suffix mismatch at pos %d — expected suffix '%s', got '%s'", pos, suffix, string(payload))
-			return state
+			return fmt.Errorf("ValidateBuffer: suffix mismatch at pos %d — expected suffix '%s', got '%s'", pos, suffix, string(payload))
 		}
-		return state
+		return nil
 	})
 }
 
@@ -408,139 +370,105 @@ func (s SchemeString) WithWidth(n int) Scheme {
 
 func (s SchemeString) Pattern(expr string) Scheme {
 	re := regexp.MustCompile(expr)
-	return SchemeFunc(func(state ValidationState) ValidationState {
-		if state.Err != nil {
-			return state
-		}
-		pos := state.Seq.CurrentIndex()
-		payload, typ, err := state.Seq.Next()
+	return SchemeFunc(func(seq *access.SeqGetAccess) error {
+		pos := seq.CurrentIndex()
+		payload, typ, err := seq.Next()
 		if err != nil {
-			state.Err = fmt.Errorf("ValidateBuffer: next failed at pos %d: %w", pos, err)
-			return state
+			return fmt.Errorf("ValidateBuffer: next failed at pos %d: %w", pos, err)
 		}
 		if typ != types.TypeString {
-			state.Err = fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected TypeString, got %v", pos, typ)
-			return state
+			return fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected TypeString, got %v", pos, typ)
 		}
 		if !re.Match(payload) {
-			state.Err = fmt.Errorf("ValidateBuffer: pattern mismatch at pos %d — expected match for '%s', got '%s'", pos, expr, string(payload))
-			return state
+			return fmt.Errorf("ValidateBuffer: pattern mismatch at pos %d — expected match for '%s', got '%s'", pos, expr, string(payload))
 		}
-		return state
+		return nil
 	})
 }
 
 func (s SchemeInt16) Range(min, max int16) Scheme {
-	return SchemeFunc(func(state ValidationState) ValidationState {
-		if state.Err != nil {
-			return state
-		}
-		pos := state.Seq.CurrentIndex()
-		payload, typ, err := state.Seq.Next()
+	return SchemeFunc(func(seq *access.SeqGetAccess) error {
+		pos := seq.CurrentIndex()
+		payload, typ, err := seq.Next()
 		if err != nil {
-			state.Err = fmt.Errorf("ValidateBuffer: next failed at pos %d: %w", pos, err)
-			return state
+			return fmt.Errorf("ValidateBuffer: next failed at pos %d: %w", pos, err)
 		}
 		if typ != types.TypeInteger {
-			state.Err = fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected TypeInteger, got %v", pos, typ)
-			return state
+			return fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected TypeInteger, got %v", pos, typ)
 		}
 		if len(payload) < 2 {
-			state.Err = fmt.Errorf("ValidateBuffer: payload too short for int16 at pos %d", pos)
-			return state
+			return fmt.Errorf("ValidateBuffer: payload too short for int16 at pos %d", pos)
 		}
 		val := int16(binary.LittleEndian.Uint16(payload))
 		if val < min || val > max {
-			state.Err = fmt.Errorf("ValidateBuffer: value out of range at pos %d — expected %d ≤ x ≤ %d, got %d", pos, min, max, val)
-			return state
+			return fmt.Errorf("ValidateBuffer: value out of range at pos %d — expected %d ≤ x ≤ %d, got %d", pos, min, max, val)
 		}
-		return state
+		return nil
 	})
 }
 
 func (s SchemeInt32) Range(min, max int32) Scheme {
-	return SchemeFunc(func(state ValidationState) ValidationState {
-		if state.Err != nil {
-			return state
-		}
-		pos := state.Seq.CurrentIndex()
-		payload, typ, err := state.Seq.Next()
+	return SchemeFunc(func(seq *access.SeqGetAccess) error {
+		pos := seq.CurrentIndex()
+		payload, typ, err := seq.Next()
 		if err != nil {
-			state.Err = fmt.Errorf("ValidateBuffer: next failed at pos %d: %w", pos, err)
-			return state
+			return fmt.Errorf("ValidateBuffer: next failed at pos %d: %w", pos, err)
 		}
 		if typ != types.TypeInteger {
-			state.Err = fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected TypeInteger, got %v", pos, typ)
-			return state
+			return fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected TypeInteger, got %v", pos, typ)
 		}
 		if len(payload) < 4 {
-			state.Err = fmt.Errorf("ValidateBuffer: payload too short for int32 at pos %d", pos)
-			return state
+			return fmt.Errorf("ValidateBuffer: payload too short for int32 at pos %d", pos)
 		}
 		val := int32(binary.LittleEndian.Uint32(payload))
 		if val < min || val > max {
-			state.Err = fmt.Errorf("ValidateBuffer: value out of range at pos %d — expected %d ≤ x ≤ %d, got %d", pos, min, max, val)
-			return state
+			return fmt.Errorf("ValidateBuffer: value out of range at pos %d — expected %d ≤ x ≤ %d, got %d", pos, min, max, val)
 		}
-		return state
+		return nil
 	})
 }
 
 func (s SchemeInt64) Range(min, max int64) Scheme {
-	return SchemeFunc(func(state ValidationState) ValidationState {
-		if state.Err != nil {
-			return state
-		}
-		pos := state.Seq.CurrentIndex()
-		payload, typ, err := state.Seq.Next()
+	return SchemeFunc(func(seq *access.SeqGetAccess) error {
+		pos := seq.CurrentIndex()
+		payload, typ, err := seq.Next()
 		if err != nil {
-			state.Err = fmt.Errorf("ValidateBuffer: next failed at pos %d: %w", pos, err)
-			return state
+			return fmt.Errorf("ValidateBuffer: next failed at pos %d: %w", pos, err)
 		}
 		if typ != types.TypeInteger {
-			state.Err = fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected TypeInteger, got %v", pos, typ)
-			return state
+			return fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected TypeInteger, got %v", pos, typ)
 		}
 		if len(payload) < 8 {
-			state.Err = fmt.Errorf("ValidateBuffer: payload too short for int64 at pos %d", pos)
-			return state
+			return fmt.Errorf("ValidateBuffer: payload too short for int64 at pos %d", pos)
 		}
 		val := int64(binary.LittleEndian.Uint64(payload))
 		if val < min || val > max {
-			state.Err = fmt.Errorf("ValidateBuffer: value out of range at pos %d — expected %d ≤ x ≤ %d, got %d", pos, min, max, val)
-			return state
+			return fmt.Errorf("ValidateBuffer: value out of range at pos %d — expected %d ≤ x ≤ %d, got %d", pos, min, max, val)
 		}
-		return state
+		return nil
 	})
 }
 
 func (s SchemeInt64) DateRange(from, to time.Time) Scheme {
 	min := from.Unix()
 	max := to.Unix()
-	return SchemeFunc(func(state ValidationState) ValidationState {
-		if state.Err != nil {
-			return state
-		}
-		pos := state.Seq.CurrentIndex()
-		payload, typ, err := state.Seq.Next()
+	return SchemeFunc(func(seq *access.SeqGetAccess) error {
+		pos := seq.CurrentIndex()
+		payload, typ, err := seq.Next()
 		if err != nil {
-			state.Err = fmt.Errorf("ValidateBuffer: next failed at pos %d: %w", pos, err)
-			return state
+			return fmt.Errorf("ValidateBuffer: next failed at pos %d: %w", pos, err)
 		}
 		if typ != types.TypeInteger {
-			state.Err = fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected TypeInteger, got %v", pos, typ)
-			return state
+			return fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected TypeInteger, got %v", pos, typ)
 		}
 		if len(payload) < 8 {
-			state.Err = fmt.Errorf("ValidateBuffer: payload too short for int64 at pos %d", pos)
-			return state
+			return fmt.Errorf("ValidateBuffer: payload too short for int64 at pos %d", pos)
 		}
 		val := int64(binary.LittleEndian.Uint64(payload))
 		if val < min || val > max {
-			state.Err = fmt.Errorf("ValidateBuffer: timestamp out of range at pos %d — expected %d ≤ x ≤ %d, got %d", pos, min, max, val)
-			return state
+			return fmt.Errorf("ValidateBuffer: timestamp out of range at pos %d — expected %d ≤ x ≤ %d, got %d", pos, min, max, val)
 		}
-		return state
+		return nil
 	})
 }
 
@@ -552,32 +480,25 @@ func SMapUnordered(mappedSchemes map[string]Scheme) Scheme {
 	return SchemeMapUnordered{Fields: mappedSchemes}
 }
 
-func (s SchemeMapUnordered) Validate(state ValidationState) ValidationState {
-	if state.Err != nil {
-		return state
-	}
-	pos := state.Seq.CurrentIndex()
-	typ, _, err := state.Seq.PeekTypeWidth()
+func (s SchemeMapUnordered) Validate(seq *access.SeqGetAccess) error {
+
+	pos := seq.CurrentIndex()
+	typ, _, err := seq.PeekTypeWidth()
 	if err != nil {
-		state.Err = fmt.Errorf("ValidateBuffer: peek failed at pos %d: %w", pos, err)
-		return state
+		return fmt.Errorf("ValidateBuffer: peek failed at pos %d: %w", pos, err)
 	}
 	if typ != types.TypeMap {
-		state.Err = fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected TypeMap, got %v", pos, typ)
-		return state
+		return fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected TypeMap, got %v", pos, typ)
 	}
 
-	seq, err := state.Seq.PeekNestedSeq()
+	subseq, err := seq.PeekNestedSeq()
 	if err != nil {
-		state.Err = fmt.Errorf("ValidateBuffer: nested peek failed at pos %d: %w", pos, err)
-		return state
+		return fmt.Errorf("ValidateBuffer: nested peek failed at pos %d: %w", pos, err)
 	}
-
-	subState := ValidationState{Seq: seq}
 	seen := make(map[string]bool)
 
 	for {
-		keyPayload, keyType, err := subState.Seq.Next()
+		keyPayload, keyType, err := subseq.Next()
 		if keyType == types.TypeEnd {
 			break
 		}
@@ -585,41 +506,36 @@ func (s SchemeMapUnordered) Validate(state ValidationState) ValidationState {
 			if keyType == types.TypeEnd {
 				break
 			}
-			state.Err = fmt.Errorf("ValidateBuffer: failed to read key at pos %d: %w", pos, err)
-			return state
+			return fmt.Errorf("ValidateBuffer: failed to read key at pos %d: %w", pos, err)
 		}
 		if keyType != types.TypeString {
-			state.Err = fmt.Errorf("ValidateBuffer: expected string key at pos %d, got %v", pos, keyType)
-			return state
+			return fmt.Errorf("ValidateBuffer: expected string key at pos %d, got %v", pos, keyType)
 		}
 		key := string(keyPayload)
 		seen[key] = true
 
 		if validator, ok := s.Fields[key]; ok {
-			subState = validator.Validate(subState)
-			if subState.Err != nil {
-				state.Err = fmt.Errorf("ValidateBuffer: value validation failed for key '%s': %w", key, subState.Err)
-				return state
+			err = validator.Validate(subseq)
+			if err != nil {
+				return fmt.Errorf("ValidateBuffer: value validation failed for key '%s': %w", key, err)
 			}
 		} else {
-			if err := subState.Seq.Advance(); err != nil {
-				state.Err = fmt.Errorf("ValidateBuffer: failed to skip value for unknown key '%s': %w", key, err)
-				return state
+			if err := subseq.Advance(); err != nil {
+				return fmt.Errorf("ValidateBuffer: failed to skip value for unknown key '%s': %w", key, err)
 			}
 		}
 	}
 
 	for key := range s.Fields {
 		if !seen[key] {
-			state.Err = fmt.Errorf("ValidateBuffer: missing expected key '%s' at pos %d", key, pos)
-			return state
+			return fmt.Errorf("ValidateBuffer: missing expected key '%s' at pos %d", key, pos)
 		}
 	}
 
-	if err := state.Seq.Advance(); err != nil {
-		state.Err = fmt.Errorf("ValidateBuffer: advance failed at pos %d: %w", pos, err)
+	if err := seq.Advance(); err != nil {
+		return fmt.Errorf("ValidateBuffer: advance failed at pos %d: %w", pos, err)
 	}
-	return state
+	return nil
 }
 
 type TupleScheme struct {
@@ -636,51 +552,42 @@ func (s TupleScheme) IsNullable() bool {
 	return s.Nullable
 }
 
-func (s TupleScheme) Validate(state ValidationState) ValidationState {
-	if state.Err != nil {
-		return state
-	}
+func (s TupleScheme) Validate(seq *access.SeqGetAccess) error {
 
-	pos := state.Seq.CurrentIndex()
-	typ, width, err := state.Seq.PeekTypeWidth()
+	pos := seq.CurrentIndex()
+	typ, width, err := seq.PeekTypeWidth()
 	if err != nil {
-		state.Err = fmt.Errorf("ValidateBuffer: peek failed at pos %d: %w", pos, err)
-		return state
+		return fmt.Errorf("ValidateBuffer: peek failed at pos %d: %w", pos, err)
 	}
 
 	if typ != types.TypeTuple {
-		state.Err = fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected %v, got %v", pos, types.TypeTuple, typ)
-		return state
+		return fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected %v, got %v", pos, types.TypeTuple, typ)
 	}
 
 	nullable := s.IsNullable()
 	hint := s.Width
 	if hint >= 0 && width != hint {
 		if !(nullable && (hint == 0 || hint == -1 || width == 0)) {
-			state.Err = fmt.Errorf("ValidateBuffer: width mismatch at pos %d — expected %d, got %d", pos, hint, width)
-			return state
+			return fmt.Errorf("ValidateBuffer: width mismatch at pos %d — expected %d, got %d", pos, hint, width)
 		}
 	}
 
-	sub, err := state.Seq.PeekNestedSeq()
+	sub, err := seq.PeekNestedSeq()
 	if err != nil {
-		state.Err = fmt.Errorf("ValidateBuffer: nested peek failed at pos %d: %w", pos, err)
-		return state
+		return fmt.Errorf("ValidateBuffer: nested peek failed at pos %d: %w", pos, err)
 	}
 
-	subState := ValidationState{Seq: sub}
+	subState := sub
 	for _, sch := range s.Schema {
-		subState = sch.Validate(subState)
-		if subState.Err != nil {
-			state.Err = fmt.Errorf("ValidateBuffer: nested validation failed at pos %d: %w", pos, subState.Err)
-			return state
+		err = sch.Validate(subState)
+		if err != nil {
+			return fmt.Errorf("ValidateBuffer: nested validation failed at pos %d: %w", pos, err)
 		}
 	}
 
-	if err := state.Seq.Advance(); err != nil {
-		state.Err = fmt.Errorf("ValidateBuffer: advance failed at pos %d: %w", pos, err)
-		return state
+	if err := seq.Advance(); err != nil {
+		return fmt.Errorf("ValidateBuffer: advance failed at pos %d: %w", pos, err)
 	}
 
-	return state
+	return nil
 }
