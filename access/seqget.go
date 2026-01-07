@@ -74,6 +74,14 @@ func (s *SeqGetAccess) PeekTypeWidth() (types.Type, int, error) {
 	return s.currentType, width, nil
 }
 
+func (s *SeqGetAccess) GetPayload(width int) ([]byte, error) {
+	if width < 0 || s.currentOffset+width > len(s.buf) {
+		return nil, fmt.Errorf("next: invalid range %d → %d", s.currentOffset, s.currentOffset+width)
+	}
+
+	return s.buf[s.currentOffset : s.currentOffset+width], nil
+}
+
 func (s *SeqGetAccess) Advance() error {
 	if s.pos+2 > s.count {
 		return fmt.Errorf("Advance: out of bounds at pos %d", s.pos)
