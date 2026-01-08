@@ -22,6 +22,9 @@ type SchemeJSON struct {
 	RangeMax int64  `json:"rangeMax,omitempty"`
 	DateFrom string `json:"dateFrom,omitempty"`
 	DateTo   string `json:"dateTo,omitempty"`
+
+	// Extra metadata for UI or other purposes
+	Extra map[string]any `json:"extra,omitempty"`
 }
 
 func BuildScheme(js SchemeJSON) Scheme {
