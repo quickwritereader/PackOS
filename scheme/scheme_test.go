@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/quickwritereader/PackOS/access"
 	pack "github.com/quickwritereader/PackOS/packable"
 	"github.com/quickwritereader/PackOS/types"
 	"github.com/stretchr/testify/assert"
@@ -435,11 +436,231 @@ func TestDecodeSTypeTuple(t *testing.T) {
 
 	// Since SType only validates type, Decode returns the raw payload
 	// In this case, it will decode the tuple into []any
-	expected := []any{
-		[]any{int32(2025), true, "hello"},
-	}
+	expected := []any{int32(2025), true, "hello"}
 
 	fmt.Println("Decoded:", ret)
 
 	assert.Equal(t, expected, ret, "Decoded tuple should match expected values")
+}
+
+func TestDecodePackedTuples_ExtraTuplesIgnored(t *testing.T) {
+	actual := pack.Pack(
+		pack.PackTuple(
+			pack.PackInt32(2025),
+			pack.PackBool(false),
+			pack.PackString("az"),
+		),
+		pack.PackTuple(
+			pack.PackInt16(7),
+			pack.PackBool(true),
+			pack.PackString("go"),
+		),
+		// Extra tuples beyond what the chain expects
+		pack.PackTuple(
+			pack.PackInt32(111),
+			pack.PackBool(true),
+			pack.PackString("xx"),
+		),
+		pack.PackTuple(
+			pack.PackInt32(222),
+			pack.PackBool(false),
+			pack.PackString("yy"),
+		),
+	)
+
+	chain := SChain(
+		STuple(
+			SInt32,
+			SBool,
+			SStringLen(len("az")),
+		),
+		STuple(
+			SInt16,
+			SBool,
+			SStringLen(len("go")),
+		),
+		// Only two tuples defined in the chain
+	)
+
+	ret, err := DecodeBuffer(actual, chain)
+	assert.NoError(t, err, "Decoding should succeed even with extra tuples in buffer")
+
+	// Expected: only the first two tuples decoded
+	expected := []any{
+		[]any{int32(2025), false, "az"},
+		[]any{int16(7), true, "go"},
+	}
+
+	fmt.Println("Decoded:", ret)
+
+	assert.Equal(t, expected, ret, "Decoder should only consume tuples defined in the chain")
+}
+
+func TestDecodePackedTuples_WithRepeat(t *testing.T) {
+	actual := pack.Pack(
+		pack.PackTuple(
+			pack.PackInt32(2025),
+			pack.PackBool(false),
+			pack.PackString("az"),
+		),
+		pack.PackTuple(
+			pack.PackInt16(7),
+			pack.PackBool(true),
+			pack.PackString("go"),
+		),
+		// Extra tuples
+		pack.PackTuple(
+			pack.PackInt32(111),
+			pack.PackBool(true),
+			pack.PackString("xx"),
+		),
+		pack.PackTuple(
+			pack.PackInt16(222),
+			pack.PackBool(false),
+			pack.PackString("yy"),
+		),
+	)
+
+	// Instead of two fixed tuples, allow repetition
+	chain := SChain(
+		SRepeat(1, -1, // at least 1, unlimited max
+			STuple(
+				SInt32,
+				SBool,
+				SString, // no fixed length needed here
+			),
+			STuple(
+				SInt16,
+				SBool,
+				SString, // no fixed length needed here
+			),
+		),
+	)
+
+	ret, err := DecodeBuffer(actual, chain)
+	assert.NoError(t, err, "Decoding should succeed with repeat scheme")
+
+	// Expected: all tuples decoded
+	expected := []any{
+		[]any{int32(2025), false, "az"},
+		[]any{int16(7), true, "go"},
+		[]any{int32(111), true, "xx"},
+		[]any{int16(222), false, "yy"},
+	}
+
+	fmt.Println("Decoded:", ret)
+
+	assert.Equal(t, expected, ret, "Decoder should consume all tuples with repeat scheme")
+
+}
+
+func TestDecodeTupleWithRepeatField(t *testing.T) {
+	actual := pack.Pack(pack.PackTuple(
+		pack.PackInt32(42),
+		pack.PackString("alpha"),
+		// repeated booleans
+		pack.PackBool(true),
+		pack.PackBool(false),
+		pack.PackBool(true),
+	))
+
+	chain := SChain(
+		STupleVal(
+			SInt32,                // ID
+			SString,               // Name
+			SRepeat(1, -1, SBool), // repeated field inside tuple
+		),
+	)
+
+	ret, err := DecodeBuffer(actual, chain)
+	assert.NoError(t, err, "Decoding should succeed with repeat inside tuple")
+
+	// Expected: tuple with repeated field as slice
+	expected := []any{
+		int32(42),
+		"alpha",
+		[]any{true, false, true}, // repeated field
+	}
+
+	fmt.Println("Decoded:", ret)
+
+	assert.Equal(t, expected, ret, "Decoder should decode repeated field inside tuple correctly")
+
+	generic, err := access.Decode(actual)
+	fmt.Println("access.Decode:", generic)
+	assert.NotEqual(t, generic, ret, "Decoder should not decode repeated field inside tuple correctly as generic decoder")
+
+	// now do it with flattened version
+	chain2 := SChain(
+		STupleValFlatten(
+			SInt32,                // ID
+			SString,               // Name
+			SRepeat(1, -1, SBool), // repeated field inside tuple
+		),
+	)
+
+	ret2, err := DecodeBuffer(actual, chain2)
+	fmt.Println("Decoded Flattened:", ret2)
+	assert.NoError(t, err, "Decoding should succeed with repeat inside tuple")
+	assert.Equal(t, generic, ret2, "Decoder should decode repeated field inside tuple correctly as generic decoder")
+
+}
+
+func TestDecodeNamedTupleValAndFlattened(t *testing.T) {
+	// Build packed tuple: (42, "alpha", true, false, true)
+	actual := pack.Pack(pack.PackTuple(
+		pack.PackInt32(42),
+		pack.PackString("alpha"),
+		pack.PackBool(true),
+		pack.PackBool(false),
+		pack.PackBool(true),
+	))
+
+	// Strict schema: repeated field stays grouped
+	chainStrict := SChain(
+		STupleNamedVal(
+			[]string{"id", "name", "flags"},
+			SInt32,
+			SString,
+			SRepeat(1, -1, SBool),
+		),
+	)
+
+	// Flattened schema: repeated field expands inline
+	chainFlat := SChain(
+		STupleNamedValFlattened(
+			[]string{"id", "name", "flag"},
+			SInt32,
+			SString,
+			SRepeat(1, -1, SBool),
+		),
+	)
+
+	// Decode with strict schema
+	decodedStrict, err := DecodeBuffer(actual, chainStrict)
+	assert.NoError(t, err, "Strict named tuple decode should succeed")
+
+	expectedStrict := map[string]any{
+		"id":    int32(42),
+		"name":  "alpha",
+		"flags": []any{true, false, true},
+	}
+	fmt.Println("DecodedStrict:", decodedStrict)
+	assert.EqualValues(t, expectedStrict, decodedStrict,
+		"Strict schema should group repeated field into a slice")
+
+	// Decode with flattened schema
+	decodedFlat, err := DecodeBuffer(actual, chainFlat)
+	assert.NoError(t, err, "Flattened named tuple decode should succeed")
+
+	expectedFlat := map[string]any{
+		"id":     int32(42),
+		"name":   "alpha",
+		"flag_0": true,
+		"flag_1": false,
+		"flag_2": true,
+	}
+	fmt.Println("DecodedFlat:", decodedFlat)
+	assert.EqualValues(t, expectedFlat, decodedFlat,
+		"Flattened schema should expand repeated field inline")
 }

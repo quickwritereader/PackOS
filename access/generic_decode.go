@@ -209,7 +209,7 @@ func DecodeMapAny(seq *SeqGetAccess) (map[string]any, error) {
 }
 
 // Decode: convenience entry point for decoding a buffer that contains a top-level tuple.
-func Decode(buf []byte) ([]any, error) {
+func Decode(buf []byte) (any, error) {
 	seq, err := NewSeqGetAccess(buf)
 	if err != nil {
 		return nil, fmt.Errorf("Decode: failed to create sequence: %w", err)
@@ -219,6 +219,9 @@ func Decode(buf []byte) ([]any, error) {
 	vals, err := DecodeTupleGeneric(seq, true)
 	if err != nil {
 		return nil, fmt.Errorf("Decode: tuple decode failed: %w", err)
+	}
+	if len(vals) == 1 {
+		return vals[0], nil
 	}
 	return vals, nil
 }
