@@ -241,4 +241,103 @@ chain := SChain(
 )
 
 err := ValidateBuffer(actual, chain)
+```  
+
+
+```go  
+// Build packed tuple: (42, "alpha", true, false, true)
+actual := pack.Pack(pack.PackTuple(
+	pack.PackInt32(42),
+	pack.PackString("alpha"),
+	pack.PackBool(true),
+	pack.PackBool(false),
+	pack.PackBool(true),
+))
+
+// Strict schema: repeated field stays grouped
+chainStrict := SChain(
+	STupleNamedVal(
+		[]string{"id", "name", "flags"},
+		SInt32,
+		SString,
+		SRepeat(1, -1, SBool),
+	),
+)
+
+// Flattened schema: repeated field expands inline
+chainFlat := SChain(
+	STupleNamedValFlattened(
+		[]string{"id", "name", "flag"},
+		SInt32,
+		SString,
+		SRepeat(1, -1, SBool),
+	),
+)
+
+// Decode with strict schema
+decodedStrict, err := DecodeBuffer(actual, chainStrict)
+assert.NoError(t, err, "Strict named tuple decode should succeed")
+
+expectedStrict := map[string]any{
+	"id":    int32(42),
+	"name":  "alpha",
+	"flags": []any{true, false, true},
+}
+fmt.Println("DecodedStrict:", decodedStrict) 
+// Decode with flattened schema
+decodedFlat, err := DecodeBuffer(actual, chainFlat) 
+
+expectedFlat := map[string]any{
+	"id":     int32(42),
+	"name":   "alpha",
+	"flag_0": true,
+	"flag_1": false,
+	"flag_2": true,
+}
+fmt.Println("DecodedFlat:", decodedFlat)
+```
+
+```go
+// Define scheme in JSON form
+schemeJSON := SchemeJSON{
+	Type: "repeat",
+	Min:  1,
+	Max:  -1,
+	Schema: []SchemeJSON{
+		{
+			Type: "tuple",
+			Schema: []SchemeJSON{
+				{Type: "int32"},
+				{Type: "bool"},
+				{Type: "string"},
+			},
+		},
+		{
+			Type: "tuple",
+			Schema: []SchemeJSON{
+				{Type: "int16"},
+				{Type: "bool"},
+				{Type: "string"},
+			},
+		},
+	},
+}
+
+// Build scheme from JSON
+built := BuildScheme(schemeJSON)
+
+// Manually constructed scheme
+expected := SRepeat(1, -1,
+	STuple(
+		SInt32,
+		SBool,
+		SString,
+	),
+	STuple(
+		SInt16,
+		SBool,
+		SString,
+	),
+)
+
 ```
