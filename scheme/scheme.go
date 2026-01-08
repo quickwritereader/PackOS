@@ -505,6 +505,12 @@ func DecodeBuffer(buf []byte, chain SchemeChain) (any, error) {
 		}
 		out = append(out, val)
 	}
+
+	// flatten if only one scheme
+	if len(out) == 1 {
+		return out[0], nil
+	}
+
 	return out, nil
 }
 
@@ -916,12 +922,22 @@ func (s SchemeMapUnordered) Decode(seq *access.SeqGetAccess) (any, error) {
 }
 
 type TupleScheme struct {
-	Schema   []Scheme
-	Nullable bool
+	Schema         []Scheme
+	Nullable       bool
+	VariableLength bool
+	Flatten        bool
 }
 
 func STuple(schema ...Scheme) TupleScheme {
-	return TupleScheme{Schema: schema, Nullable: true}
+	return TupleScheme{Schema: schema, Nullable: true, VariableLength: false, Flatten: false}
+}
+
+func STupleVal(schema ...Scheme) TupleScheme {
+	return TupleScheme{Schema: schema, Nullable: true, VariableLength: true, Flatten: false}
+}
+
+func STupleValFlatten(schema ...Scheme) TupleScheme {
+	return TupleScheme{Schema: schema, Nullable: true, VariableLength: true, Flatten: true}
 }
 
 func (s TupleScheme) IsNullable() bool {
@@ -942,7 +958,7 @@ func (s TupleScheme) Validate(seq *access.SeqGetAccess) error {
 		if err != nil {
 			return fmt.Errorf("ValidateBuffer: nested peek failed at pos %d: %w", pos, err)
 		}
-		if w > 0 && sub.ArgCount() != w {
+		if w > 0 && sub.ArgCount() != w && !s.VariableLength {
 			return fmt.Errorf("ValidateBuffer: container item count mistmatch at pos %d: %d!=%d", pos, w, sub.ArgCount())
 		}
 
@@ -977,7 +993,7 @@ func (s TupleScheme) Decode(seq *access.SeqGetAccess) (any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("ValidateBuffer: nested peek failed at pos %d: %w", pos, err)
 		}
-		if w > 0 && sub.ArgCount() != w {
+		if w > 0 && sub.ArgCount() != w && !s.VariableLength {
 			return nil, fmt.Errorf("ValidateBuffer: container item count mistmatch at pos %d: %d!=%d", pos, w, sub.ArgCount())
 		}
 
@@ -987,6 +1003,16 @@ func (s TupleScheme) Decode(seq *access.SeqGetAccess) (any, error) {
 			if err != nil {
 				return nil, fmt.Errorf("ValidateBuffer: nested validation failed at pos %d: %w", pos, err)
 			}
+			// flatten only if flag is set and scheme is SRepeat
+			if s.Flatten {
+				if _, ok := sch.(SRepeatScheme); ok {
+					if arr, ok := v.([]any); ok {
+						out = append(out, arr...)
+						continue
+					}
+				}
+			}
+
 			out = append(out, v)
 		}
 	}
@@ -999,13 +1025,47 @@ func (s TupleScheme) Decode(seq *access.SeqGetAccess) (any, error) {
 }
 
 type TupleSchemeNamed struct {
-	Schema     []Scheme
-	FieldNames []string
-	Nullable   bool
+	Schema         []Scheme
+	FieldNames     []string
+	Nullable       bool
+	Flatten        bool
+	VariableLength bool
 }
 
 func STupleNamed(fieldNames []string, schema ...Scheme) TupleSchemeNamed {
+	if len(fieldNames) != len(schema) {
+		panic("STupleNamed: fieldNames and schema length mismatch")
+	}
+
 	return TupleSchemeNamed{FieldNames: fieldNames, Schema: schema, Nullable: true}
+}
+
+// Strict named tuple: exact field count
+func STupleNamedVal(fieldNames []string, schema ...Scheme) TupleSchemeNamed {
+	if len(fieldNames) != len(schema) {
+		panic("STupleNamedVal: fieldNames and schema length mismatch")
+	}
+	return TupleSchemeNamed{
+		FieldNames:     fieldNames,
+		Schema:         schema,
+		Nullable:       true,
+		Flatten:        false,
+		VariableLength: true,
+	}
+}
+
+// Flexible named tuple: allows repeats/extra fields
+func STupleNamedValFlattened(fieldNames []string, schema ...Scheme) TupleSchemeNamed {
+	if len(fieldNames) != len(schema) {
+		panic("STupleNamedValFlattened: fieldNames and schema length mismatch")
+	}
+	return TupleSchemeNamed{
+		FieldNames:     fieldNames,
+		Schema:         schema,
+		Nullable:       true,
+		Flatten:        true,
+		VariableLength: true,
+	}
 }
 
 func (s TupleSchemeNamed) IsNullable() bool {
@@ -1047,38 +1107,150 @@ func (s TupleSchemeNamed) Validate(seq *access.SeqGetAccess) error {
 }
 
 func (s TupleSchemeNamed) Decode(seq *access.SeqGetAccess) (any, error) {
-
 	pos := seq.CurrentIndex()
 	_, err := precheck(pos, seq, types.TypeTuple, -1, s.IsNullable())
 	if err != nil {
 		return nil, err
 	}
 
-	var out map[string]any = nil
+	out := make(map[string]any)
 	w := len(s.Schema)
-	if w != 0 {
+
+	if w > 0 {
 		sub, err := seq.PeekNestedSeq()
 		if err != nil {
-			return nil, fmt.Errorf("ValidateBuffer: nested peek failed at pos %d: %w", pos, err)
-		}
-		if w > 0 && sub.ArgCount() != w {
-			return nil, fmt.Errorf("ValidateBuffer: container item count mistmatch at pos %d: %d!=%d", pos, w, sub.ArgCount())
+			return nil, fmt.Errorf("Decode: nested peek failed at pos %d: %w", pos, err)
 		}
 
-		out = make(map[string]any, sub.ArgCount())
-		i := 0
-		for _, sch := range s.Schema {
+		// strict vs variable-length
+		if !s.VariableLength && sub.ArgCount() != w {
+			return nil, fmt.Errorf("Decode: item count mismatch at pos %d: %d!=%d", pos, w, sub.ArgCount())
+		}
+
+		for i, sch := range s.Schema {
 			v, err := sch.Decode(sub)
 			if err != nil {
-				return nil, fmt.Errorf("ValidateBuffer: nested validation failed at pos %d: %w", pos, err)
+				return nil, fmt.Errorf("Decode: nested decode failed for field '%s' at pos %d: %w",
+					s.FieldNames[i], pos, err)
 			}
+
+			// flatten only if flag is set and scheme is repeat
+			if s.Flatten {
+				if _, ok := sch.(SRepeatScheme); ok {
+					if arr, ok := v.([]any); ok {
+						for j, elem := range arr {
+							out[fmt.Sprintf("%s_%d", s.FieldNames[i], j)] = elem
+						}
+						continue
+					}
+				}
+			}
+
 			out[s.FieldNames[i]] = v
-			i++
 		}
 	}
 
 	if err := seq.Advance(); err != nil {
-		return nil, fmt.Errorf("ValidateBuffer: advance failed at pos %d: %w", pos, err)
+		return nil, fmt.Errorf("Decode: advance failed at pos %d: %w", pos, err)
+	}
+
+	return out, nil
+}
+
+type SRepeatScheme struct {
+	Schema []Scheme
+	max    int
+	min    int
+}
+
+func SRepeat(minimum int, maximum int, schema ...Scheme) SRepeatScheme {
+	if minimum < 0 {
+		minimum = -1
+	}
+	if maximum < 0 {
+		maximum = -1
+	}
+	return SRepeatScheme{Schema: schema, min: minimum, max: maximum}
+}
+
+func (s SRepeatScheme) IsNullable() bool {
+	return s.min <= 0
+}
+
+func (s SRepeatScheme) Validate(seq *access.SeqGetAccess) error {
+	var err error
+	i := 0
+	argCount := seq.ArgCount() - seq.CurrentIndex()
+
+	// enforce minimum upfront
+	if s.min != -1 && argCount < s.min {
+		return fmt.Errorf("Expected minimum %d elements, but only %d remain", s.min, argCount)
+	}
+
+	// decide maximum iterations
+	maxIter := argCount // default: consume everything available
+	if s.max != -1 {
+		if s.max < argCount {
+			maxIter = s.max
+		}
+	}
+
+outer:
+	for {
+
+		for _, scheme := range s.Schema {
+			err = scheme.Validate(seq)
+			if err != nil {
+				return err
+			}
+			if i >= maxIter {
+				break outer
+			}
+			i++
+		}
+
+	}
+
+	return nil
+}
+
+func (s SRepeatScheme) Decode(seq *access.SeqGetAccess) (any, error) {
+	i := 0
+
+	argCount := seq.ArgCount() - seq.CurrentIndex()
+
+	// enforce minimum upfront
+	if s.min != -1 && argCount < s.min {
+		return nil, fmt.Errorf("Expected minimum %d elements, but only %d remain", s.min, argCount)
+	}
+
+	// decide maximum iterations
+	maxIter := argCount // default: consume everything available
+	if s.max != -1 {
+		if s.max < argCount {
+			maxIter = s.max
+		}
+	}
+
+	// flat slice of decoded elements, capacity = maxIter
+	out := make([]any, 0, maxIter)
+
+outer:
+	for {
+		for _, scheme := range s.Schema {
+			// stop if we've reached the max permitted elements
+			if i >= maxIter {
+				break outer
+			}
+
+			val, err := scheme.Decode(seq)
+			if err != nil {
+				return nil, err
+			}
+
+			out = append(out, val)
+			i++
+		}
 	}
 
 	return out, nil
