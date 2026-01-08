@@ -50,104 +50,6 @@ func (s SchemeAny) Decode(seq *access.SeqGetAccess) (any, error) {
 	return v, nil
 }
 
-type SchemeBool struct{}
-
-func (SchemeBool) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, types.TypeBool, 1, false)
-}
-
-func (SchemeBool) Decode(seq *access.SeqGetAccess) (any, error) {
-	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeBool, 1, false)
-	if err != nil {
-		return nil, err
-	}
-	return payload[0] != 0, nil
-}
-
-type SchemeInt8 struct{}
-
-func (SchemeInt8) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, types.TypeInteger, 1, false)
-}
-
-func (SchemeInt8) Decode(seq *access.SeqGetAccess) (any, error) {
-	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 1, false)
-	if err != nil {
-		return nil, err
-	}
-	return int8(payload[0]), nil
-}
-
-type SchemeInt16 struct{}
-
-func (SchemeInt16) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, types.TypeInteger, 2, false)
-}
-
-func (SchemeInt16) Decode(seq *access.SeqGetAccess) (any, error) {
-	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 2, false)
-	if err != nil {
-		return nil, err
-	}
-	return int16(binary.LittleEndian.Uint16(payload)), nil
-}
-
-type SchemeInt32 struct{}
-
-func (SchemeInt32) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, types.TypeInteger, 4, false)
-}
-
-func (SchemeInt32) Decode(seq *access.SeqGetAccess) (any, error) {
-	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 4, false)
-	if err != nil {
-		return nil, err
-	}
-	return int32(binary.LittleEndian.Uint32(payload)), nil
-}
-
-type SchemeInt64 struct{}
-
-func (SchemeInt64) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, types.TypeInteger, 8, false)
-}
-
-func (SchemeInt64) Decode(seq *access.SeqGetAccess) (any, error) {
-	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 8, false)
-	if err != nil {
-		return nil, err
-	}
-	return int64(binary.LittleEndian.Uint64(payload)), nil
-}
-
-type SchemeFloat32 struct{}
-
-func (SchemeFloat32) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, types.TypeFloating, 4, false)
-}
-
-func (SchemeFloat32) Decode(seq *access.SeqGetAccess) (any, error) {
-	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeFloating, 4, false)
-	if err != nil {
-		return nil, err
-	}
-	return math.Float32frombits(binary.LittleEndian.Uint32(payload)), nil
-}
-
-type SchemeFloat64 struct{}
-
-func (SchemeFloat64) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, types.TypeFloating, 8, false)
-}
-
-func (SchemeFloat64) Decode(seq *access.SeqGetAccess) (any, error) {
-	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeFloating, 8, false)
-	if err != nil {
-		return nil, err
-	}
-	return math.Float64frombits(binary.LittleEndian.Uint64(payload)), nil
-}
-
 type SchemeString struct{ Width int }
 
 func (s SchemeString) Validate(seq *access.SeqGetAccess) error {
@@ -290,33 +192,35 @@ type Nullable interface {
 	IsNullable() bool
 }
 
-// Nullable Primitives
+func (s SchemeString) IsNullable() bool { return s.Width <= 0 }
+func (s SchemeBytes) IsNullable() bool  { return s.Width <= 0 }
+func (s SchemeMap) IsNullable() bool    { return s.Width <= 0 }
 
-type SchemeNullableBool struct{}
+// Primitives
+type SchemeBool struct{ Nullable bool }
 
-func (SchemeNullableBool) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, types.TypeBool, 1, true)
+func (s SchemeBool) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, types.TypeBool, 1, s.Nullable)
 }
-
-func (SchemeNullableBool) Decode(seq *access.SeqGetAccess) (any, error) {
-	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeBool, 1, true)
+func (s SchemeBool) Decode(seq *access.SeqGetAccess) (any, error) {
+	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeBool, 1, s.Nullable)
 	if err != nil {
 		return nil, err
 	}
-	if payload != nil {
-		return payload[0] != 0, nil
+	if payload == nil {
+		return nil, nil
 	}
-	return nil, nil
+	return payload[0] != 0, nil
 }
+func (s SchemeBool) IsNullable() bool { return s.Nullable }
 
-type SchemeNullableInt8 struct{}
+type SchemeInt8 struct{ Nullable bool }
 
-func (SchemeNullableInt8) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, types.TypeInteger, 1, true)
+func (s SchemeInt8) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, types.TypeInteger, 1, s.Nullable)
 }
-
-func (SchemeNullableInt8) Decode(seq *access.SeqGetAccess) (any, error) {
-	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 1, true)
+func (s SchemeInt8) Decode(seq *access.SeqGetAccess) (any, error) {
+	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 1, s.Nullable)
 	if err != nil {
 		return nil, err
 	}
@@ -325,15 +229,15 @@ func (SchemeNullableInt8) Decode(seq *access.SeqGetAccess) (any, error) {
 	}
 	return int8(payload[0]), nil
 }
+func (s SchemeInt8) IsNullable() bool { return s.Nullable }
 
-type SchemeNullableInt16 struct{}
+type SchemeInt16 struct{ Nullable bool }
 
-func (SchemeNullableInt16) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, types.TypeInteger, 2, true)
+func (s SchemeInt16) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, types.TypeInteger, 2, s.Nullable)
 }
-
-func (SchemeNullableInt16) Decode(seq *access.SeqGetAccess) (any, error) {
-	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 2, true)
+func (s SchemeInt16) Decode(seq *access.SeqGetAccess) (any, error) {
+	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 2, s.Nullable)
 	if err != nil {
 		return nil, err
 	}
@@ -342,15 +246,15 @@ func (SchemeNullableInt16) Decode(seq *access.SeqGetAccess) (any, error) {
 	}
 	return int16(binary.LittleEndian.Uint16(payload)), nil
 }
+func (s SchemeInt16) IsNullable() bool { return s.Nullable }
 
-type SchemeNullableInt32 struct{}
+type SchemeInt32 struct{ Nullable bool }
 
-func (SchemeNullableInt32) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, types.TypeInteger, 4, true)
+func (s SchemeInt32) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, types.TypeInteger, 4, s.Nullable)
 }
-
-func (SchemeNullableInt32) Decode(seq *access.SeqGetAccess) (any, error) {
-	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 4, true)
+func (s SchemeInt32) Decode(seq *access.SeqGetAccess) (any, error) {
+	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 4, s.Nullable)
 	if err != nil {
 		return nil, err
 	}
@@ -359,15 +263,15 @@ func (SchemeNullableInt32) Decode(seq *access.SeqGetAccess) (any, error) {
 	}
 	return int32(binary.LittleEndian.Uint32(payload)), nil
 }
+func (s SchemeInt32) IsNullable() bool { return s.Nullable }
 
-type SchemeNullableInt64 struct{}
+type SchemeInt64 struct{ Nullable bool }
 
-func (SchemeNullableInt64) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, types.TypeInteger, 8, true)
+func (s SchemeInt64) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, types.TypeInteger, 8, s.Nullable)
 }
-
-func (SchemeNullableInt64) Decode(seq *access.SeqGetAccess) (any, error) {
-	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 8, true)
+func (s SchemeInt64) Decode(seq *access.SeqGetAccess) (any, error) {
+	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 8, s.Nullable)
 	if err != nil {
 		return nil, err
 	}
@@ -376,15 +280,15 @@ func (SchemeNullableInt64) Decode(seq *access.SeqGetAccess) (any, error) {
 	}
 	return int64(binary.LittleEndian.Uint64(payload)), nil
 }
+func (s SchemeInt64) IsNullable() bool { return s.Nullable }
 
-type SchemeNullableFloat32 struct{}
+type SchemeFloat32 struct{ Nullable bool }
 
-func (SchemeNullableFloat32) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, types.TypeFloating, 4, true)
+func (s SchemeFloat32) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, types.TypeFloating, 4, s.Nullable)
 }
-
-func (SchemeNullableFloat32) Decode(seq *access.SeqGetAccess) (any, error) {
-	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeFloating, 4, true)
+func (s SchemeFloat32) Decode(seq *access.SeqGetAccess) (any, error) {
+	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeFloating, 4, s.Nullable)
 	if err != nil {
 		return nil, err
 	}
@@ -393,15 +297,15 @@ func (SchemeNullableFloat32) Decode(seq *access.SeqGetAccess) (any, error) {
 	}
 	return math.Float32frombits(binary.LittleEndian.Uint32(payload)), nil
 }
+func (s SchemeFloat32) IsNullable() bool { return s.Nullable }
 
-type SchemeNullableFloat64 struct{}
+type SchemeFloat64 struct{ Nullable bool }
 
-func (SchemeNullableFloat64) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, types.TypeFloating, 8, true)
+func (s SchemeFloat64) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(seq, types.TypeFloating, 8, s.Nullable)
 }
-
-func (SchemeNullableFloat64) Decode(seq *access.SeqGetAccess) (any, error) {
-	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeFloating, 8, true)
+func (s SchemeFloat64) Decode(seq *access.SeqGetAccess) (any, error) {
+	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeFloating, 8, s.Nullable)
 	if err != nil {
 		return nil, err
 	}
@@ -410,25 +314,7 @@ func (SchemeNullableFloat64) Decode(seq *access.SeqGetAccess) (any, error) {
 	}
 	return math.Float64frombits(binary.LittleEndian.Uint64(payload)), nil
 }
-
-// All others default to non-nullable
-func (SchemeBool) IsNullable() bool       { return false }
-func (SchemeInt16) IsNullable() bool      { return false }
-func (SchemeInt32) IsNullable() bool      { return false }
-func (SchemeInt64) IsNullable() bool      { return false }
-func (SchemeFloat32) IsNullable() bool    { return false }
-func (SchemeFloat64) IsNullable() bool    { return false }
-func (s SchemeString) IsNullable() bool   { return s.Width <= 0 }
-func (s SchemeBytes) IsNullable() bool    { return s.Width <= 0 }
-func (s SchemeMap) IsNullable() bool      { return s.Width <= 0 }
-func (s SchemeTypeOnly) IsNullable() bool { return false }
-
-func (SchemeNullableBool) IsNullable() bool    { return true }
-func (SchemeNullableInt16) IsNullable() bool   { return true }
-func (SchemeNullableInt32) IsNullable() bool   { return true }
-func (SchemeNullableInt64) IsNullable() bool   { return true }
-func (SchemeNullableFloat32) IsNullable() bool { return true }
-func (SchemeNullableFloat64) IsNullable() bool { return true }
+func (s SchemeFloat64) IsNullable() bool { return s.Nullable }
 
 func SType(tag types.Type) Scheme {
 	return SchemeTypeOnly{Tag: tag}
@@ -442,13 +328,13 @@ var (
 	SInt64       SchemeInt64  = SchemeInt64{}
 	SFloat32     Scheme       = SchemeFloat32{}
 	SFloat64     Scheme       = SchemeFloat64{}
-	SNullBool    Scheme       = SchemeNullableBool{}
-	SNullInt8    Scheme       = SchemeNullableInt8{}
-	SNullInt16   Scheme       = SchemeNullableInt16{}
-	SNullInt32   Scheme       = SchemeNullableInt32{}
-	SNullInt64   Scheme       = SchemeNullableInt64{}
-	SNullFloat32 Scheme       = SchemeNullableFloat32{}
-	SNullFloat64 Scheme       = SchemeNullableFloat64{}
+	SNullBool    Scheme       = SchemeBool{Nullable: true}
+	SNullInt8    Scheme       = SchemeInt8{Nullable: true}
+	SNullInt16   Scheme       = SchemeInt16{Nullable: true}
+	SNullInt32   Scheme       = SchemeInt32{Nullable: true}
+	SNullInt64   Scheme       = SchemeInt64{Nullable: true}
+	SNullFloat32 Scheme       = SchemeFloat32{Nullable: true}
+	SNullFloat64 Scheme       = SchemeFloat64{Nullable: true}
 	SString      SchemeString = SchemeString{Width: -1}
 	SAny                      = SchemeAny{}
 )
