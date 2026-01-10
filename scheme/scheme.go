@@ -12,10 +12,97 @@ import (
 	"github.com/quickwritereader/PackOS/types"
 )
 
+type ErrorCode int
+
+const (
+	ErrUnknown            ErrorCode = iota
+	ErrInvalidFormat                // decoding failed due to invalid format
+	ErrUnexpectedEOF                // sequence ended unexpectedly while advancing or reading
+	ErrConstraintViolated           // validation rule failed (width, type mismatch, nullable constraint)
+
+	// String‑specific validation codes
+	ErrStringMismatch // generic string mismatch
+	ErrStringPrefix   // prefix check failed
+	ErrStringSuffix   // suffix check failed
+	ErrStringPattern  // regex/pattern check failed
+	ErrStringMatch    // exact match failed
+
+	// Numeric validation codes
+	ErrOutOfRange     // integer value out of allowed range
+	ErrDateOutOfRange // timestamp/date value out of allowed range
+)
+
+type SchemeError struct {
+	Code     ErrorCode
+	Name     string
+	Position int
+	InnerErr error
+}
+
+// RangeErrorDetails represents a structured range violation.
+type RangeErrorDetails struct {
+	Min    int64
+	Max    int64
+	Actual int64
+}
+
+func (r RangeErrorDetails) Error() string {
+	return fmt.Sprintf("out of range: expected %d ≤ x ≤ %d, got %d", r.Min, r.Max, r.Actual)
+}
+
+type StringErrorDetails struct {
+	Actual string
+}
+
+func (e StringErrorDetails) Error() string {
+	return fmt.Sprintf("got '%s'", e.Actual)
+}
+
+func formatError(code ErrorCode, field string, pos int, inner error) string {
+	if inner != nil {
+		return fmt.Sprintf("%d: error in %s position %d, innerError %s", code, field, pos, inner)
+	}
+	return fmt.Sprintf("%d: error in %s position %d", code, field, pos)
+}
+
+func (v *SchemeError) Error() string {
+	return formatError(v.Code, v.Name, v.Position, v.InnerErr)
+}
+
+func (v *SchemeError) Unwrap() error {
+	return v.InnerErr
+}
+
+func NewSchemeError(code ErrorCode, field string, pos int, inner error) *SchemeError {
+	return &SchemeError{Code: code, Name: field, Position: pos, InnerErr: inner}
+}
+
 type Scheme interface {
 	Validate(seq *access.SeqGetAccess) error
 	Decode(seq *access.SeqGetAccess) (any, error)
 }
+
+const (
+	SchemeAnyName          = "SchemeAny"
+	SchemeStringName       = "SchemeString"
+	SchemeBytesName        = "SchemeBytes"
+	SchemeMapName          = "SchemeMap"
+	SchemeTypeOnlyName     = "SchemeTypeOnly"
+	SchemeBoolName         = "SchemeBool"
+	SchemeInt8Name         = "SchemeInt8"
+	SchemeInt16Name        = "SchemeInt16"
+	SchemeInt32Name        = "SchemeInt32"
+	SchemeInt64Name        = "SchemeInt64"
+	SchemeFloat32Name      = "SchemeFloat32"
+	SchemeFloat64Name      = "SchemeFloat64"
+	SchemeNamedChainName   = "SchemeNamedChain"
+	SchemeMapUnorderedName = "SchemeMapUnordered"
+	ChainName              = "SchemeChain"
+
+	TupleSchemeName      = "TupleScheme"
+	TupleSchemeNamedName = "TupleSchemeNamed"
+	SRepeatSchemeName    = "SRepeatScheme"
+)
 
 type SchemeGeneric struct {
 	ValidateFunc func(seq *access.SeqGetAccess) error
@@ -32,9 +119,8 @@ func (f SchemeGeneric) Decode(seq *access.SeqGetAccess) (any, error) {
 type SchemeAny struct{}
 
 func (s SchemeAny) Validate(seq *access.SeqGetAccess) error {
-
 	if err := seq.Advance(); err != nil {
-		return fmt.Errorf("ValidateBuffer: failed to skip value: %w", err)
+		return NewSchemeError(ErrUnexpectedEOF, SchemeAnyName, seq.CurrentIndex(), err)
 	}
 	return nil
 }
@@ -42,10 +128,10 @@ func (s SchemeAny) Validate(seq *access.SeqGetAccess) error {
 func (s SchemeAny) Decode(seq *access.SeqGetAccess) (any, error) {
 	v, err := access.DecodeTupleGeneric(seq, false)
 	if err != nil {
-		return nil, fmt.Errorf("ValidateBuffer: decode any error: %w", err)
+		return nil, NewSchemeError(ErrInvalidFormat, SchemeAnyName, seq.CurrentIndex(), err)
 	}
 	if err := seq.Advance(); err != nil {
-		return nil, fmt.Errorf("ValidateBuffer: failed to skip value: %w", err)
+		return nil, NewSchemeError(ErrUnexpectedEOF, SchemeAnyName, seq.CurrentIndex(), err)
 	}
 	return v, nil
 }
@@ -53,11 +139,11 @@ func (s SchemeAny) Decode(seq *access.SeqGetAccess) (any, error) {
 type SchemeString struct{ Width int }
 
 func (s SchemeString) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, types.TypeString, s.Width, s.IsNullable())
+	return validatePrimitive(SchemeStringName, seq, types.TypeString, s.Width, s.IsNullable())
 }
 
 func (s SchemeString) Decode(seq *access.SeqGetAccess) (any, error) {
-	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeString, s.Width, s.IsNullable())
+	payload, err := validatePrimitiveAndGetPayload(SchemeStringName, seq, types.TypeString, s.Width, s.IsNullable())
 	if err != nil {
 		return nil, err
 	}
@@ -67,11 +153,11 @@ func (s SchemeString) Decode(seq *access.SeqGetAccess) (any, error) {
 type SchemeBytes struct{ Width int }
 
 func (s SchemeBytes) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, types.TypeString, s.Width, s.IsNullable())
+	return validatePrimitive(SchemeBytesName, seq, types.TypeString, s.Width, s.IsNullable())
 }
 
 func (s SchemeBytes) Decode(seq *access.SeqGetAccess) (any, error) {
-	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeByteArray, s.Width, s.IsNullable())
+	payload, err := validatePrimitiveAndGetPayload(SchemeBytesName, seq, types.TypeByteArray, s.Width, s.IsNullable())
 	if err != nil {
 		return nil, err
 	}
@@ -86,74 +172,67 @@ type SchemeMap struct {
 }
 
 func (s SchemeMap) Validate(seq *access.SeqGetAccess) error {
-
 	pos := seq.CurrentIndex()
-	_, err := precheck(pos, seq, types.TypeMap, s.Width, s.IsNullable())
+	_, err := precheck(SchemeMapName, pos, seq, types.TypeMap, s.Width, s.IsNullable())
 	if err != nil {
 		return err
 	}
 
 	if s.Width != 0 {
-
 		sub, err := seq.PeekNestedSeq()
 		if err != nil {
-			return fmt.Errorf("ValidateBuffer: nested peek failed at pos %d: %w", pos, err)
+			return NewSchemeError(ErrInvalidFormat, SchemeMapName, pos, err)
 		}
-		subState := sub
 		for _, sch := range s.Schema {
-			subStateErr := sch.Validate(subState)
-			if subStateErr != nil {
-				return fmt.Errorf("ValidateBuffer: nested validation failed at pos %d: %w", pos, subStateErr)
+			if err := sch.Validate(sub); err != nil {
+				return NewSchemeError(ErrInvalidFormat, SchemeMapName, pos, err)
 			}
 		}
 	}
+
 	if err := seq.Advance(); err != nil {
-		return fmt.Errorf("ValidateBuffer: advance failed at pos %d: %w", pos, err)
+		return NewSchemeError(ErrUnexpectedEOF, SchemeMapName, pos, err)
 	}
 	return nil
 }
 
 func (s SchemeMap) Decode(seq *access.SeqGetAccess) (any, error) {
-
 	pos := seq.CurrentIndex()
-	_, err := precheck(pos, seq, types.TypeMap, s.Width, s.IsNullable())
+	_, err := precheck(SchemeMapName, pos, seq, types.TypeMap, s.Width, s.IsNullable())
 	if err != nil {
 		return nil, err
 	}
 
 	if len(s.Schema)%2 != 0 {
-		return nil, fmt.Errorf("SchemeMap should contain key and value scheme pairs, current count %d", len(s.Schema))
+		return nil, NewSchemeError(ErrConstraintViolated, SchemeMapName, pos,
+			fmt.Errorf("should contain key/value scheme pairs, count %d", len(s.Schema)))
 	}
 
-	var out map[string]any = nil
-
+	var out map[string]any
 	if s.Width != 0 {
 		sub, err := seq.PeekNestedSeq()
-
 		if err != nil {
-			return nil, fmt.Errorf("ValidateBuffer: nested peek failed at pos %d: %w", pos, err)
+			return nil, NewSchemeError(ErrInvalidFormat, SchemeMapName, pos, err)
 		}
 
 		out = make(map[string]any, sub.ArgCount()/2)
-
 		for i := 0; i < len(s.Schema); i += 2 {
 			key, err := s.Schema[i].Decode(sub)
 			if err != nil {
-				return nil, fmt.Errorf("ValidateBuffer: nested validation failed at pos %d: %w", pos, err)
+				return nil, NewSchemeError(ErrInvalidFormat, SchemeMapName, pos, err)
 			}
 			value, err := s.Schema[i+1].Decode(sub)
 			if err != nil {
-				return nil, fmt.Errorf("ValidateBuffer: nested validation failed at pos %d: %w", pos, err)
+				return nil, NewSchemeError(ErrInvalidFormat, SchemeMapName, pos, err)
 			}
-			keyStr, ok := key.(string)
-			if ok {
+			if keyStr, ok := key.(string); ok {
 				out[keyStr] = value
 			}
-
 		}
 	}
+
 	if err := seq.Advance(); err != nil {
-		return nil, fmt.Errorf("ValidateBuffer: advance failed at pos %d: %w", pos, err)
+		return nil, NewSchemeError(ErrUnexpectedEOF, SchemeMapName, pos, err)
 	}
 	return out, nil
 }
@@ -163,7 +242,7 @@ type SchemeTypeOnly struct {
 }
 
 func (s SchemeTypeOnly) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, s.Tag, -1, false)
+	return validatePrimitive(SchemeTypeOnlyName, seq, s.Tag, -1, false)
 }
 
 func (s SchemeTypeOnly) Decode(seq *access.SeqGetAccess) (any, error) {
@@ -176,15 +255,13 @@ func (s SchemeTypeOnly) Decode(seq *access.SeqGetAccess) (any, error) {
 		pos := seq.CurrentIndex()
 		valPayload, valTyp, err := seq.Next()
 		if err != nil {
-			return nil, fmt.Errorf("Decode: value decode error at %d: %w", pos, err)
+			return nil, NewSchemeError(ErrInvalidFormat, SchemeTypeOnlyName, pos, err)
 		}
 		v, err := access.DecodePrimitive(valTyp, valPayload)
-
 		if err != nil {
-			return nil, fmt.Errorf("Decode: value decode error at %d: %w", pos, err)
+			return nil, NewSchemeError(ErrInvalidFormat, SchemeTypeOnlyName, pos, err)
 		}
 		return v, nil
-
 	}
 }
 
@@ -200,10 +277,11 @@ func (s SchemeMap) IsNullable() bool    { return s.Width <= 0 }
 type SchemeBool struct{ Nullable bool }
 
 func (s SchemeBool) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, types.TypeBool, 1, s.Nullable)
+	return validatePrimitive(SchemeBoolName, seq, types.TypeBool, 1, s.Nullable)
 }
+
 func (s SchemeBool) Decode(seq *access.SeqGetAccess) (any, error) {
-	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeBool, 1, s.Nullable)
+	payload, err := validatePrimitiveAndGetPayload(SchemeBoolName, seq, types.TypeBool, 1, s.Nullable)
 	if err != nil {
 		return nil, err
 	}
@@ -212,15 +290,16 @@ func (s SchemeBool) Decode(seq *access.SeqGetAccess) (any, error) {
 	}
 	return payload[0] != 0, nil
 }
+
 func (s SchemeBool) IsNullable() bool { return s.Nullable }
 
 type SchemeInt8 struct{ Nullable bool }
 
 func (s SchemeInt8) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, types.TypeInteger, 1, s.Nullable)
+	return validatePrimitive(SchemeInt8Name, seq, types.TypeInteger, 1, s.Nullable)
 }
 func (s SchemeInt8) Decode(seq *access.SeqGetAccess) (any, error) {
-	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 1, s.Nullable)
+	payload, err := validatePrimitiveAndGetPayload(SchemeInt8Name, seq, types.TypeInteger, 1, s.Nullable)
 	if err != nil {
 		return nil, err
 	}
@@ -234,10 +313,10 @@ func (s SchemeInt8) IsNullable() bool { return s.Nullable }
 type SchemeInt16 struct{ Nullable bool }
 
 func (s SchemeInt16) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, types.TypeInteger, 2, s.Nullable)
+	return validatePrimitive(SchemeInt16Name, seq, types.TypeInteger, 2, s.Nullable)
 }
 func (s SchemeInt16) Decode(seq *access.SeqGetAccess) (any, error) {
-	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 2, s.Nullable)
+	payload, err := validatePrimitiveAndGetPayload(SchemeInt16Name, seq, types.TypeInteger, 2, s.Nullable)
 	if err != nil {
 		return nil, err
 	}
@@ -251,10 +330,10 @@ func (s SchemeInt16) IsNullable() bool { return s.Nullable }
 type SchemeInt32 struct{ Nullable bool }
 
 func (s SchemeInt32) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, types.TypeInteger, 4, s.Nullable)
+	return validatePrimitive(SchemeInt32Name, seq, types.TypeInteger, 4, s.Nullable)
 }
 func (s SchemeInt32) Decode(seq *access.SeqGetAccess) (any, error) {
-	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 4, s.Nullable)
+	payload, err := validatePrimitiveAndGetPayload(SchemeInt32Name, seq, types.TypeInteger, 4, s.Nullable)
 	if err != nil {
 		return nil, err
 	}
@@ -268,10 +347,10 @@ func (s SchemeInt32) IsNullable() bool { return s.Nullable }
 type SchemeInt64 struct{ Nullable bool }
 
 func (s SchemeInt64) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, types.TypeInteger, 8, s.Nullable)
+	return validatePrimitive(SchemeInt64Name, seq, types.TypeInteger, 8, s.Nullable)
 }
 func (s SchemeInt64) Decode(seq *access.SeqGetAccess) (any, error) {
-	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 8, s.Nullable)
+	payload, err := validatePrimitiveAndGetPayload(SchemeInt64Name, seq, types.TypeInteger, 8, s.Nullable)
 	if err != nil {
 		return nil, err
 	}
@@ -285,10 +364,10 @@ func (s SchemeInt64) IsNullable() bool { return s.Nullable }
 type SchemeFloat32 struct{ Nullable bool }
 
 func (s SchemeFloat32) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, types.TypeFloating, 4, s.Nullable)
+	return validatePrimitive(SchemeFloat32Name, seq, types.TypeFloating, 4, s.Nullable)
 }
 func (s SchemeFloat32) Decode(seq *access.SeqGetAccess) (any, error) {
-	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeFloating, 4, s.Nullable)
+	payload, err := validatePrimitiveAndGetPayload(SchemeFloat32Name, seq, types.TypeFloating, 4, s.Nullable)
 	if err != nil {
 		return nil, err
 	}
@@ -302,10 +381,10 @@ func (s SchemeFloat32) IsNullable() bool { return s.Nullable }
 type SchemeFloat64 struct{ Nullable bool }
 
 func (s SchemeFloat64) Validate(seq *access.SeqGetAccess) error {
-	return validatePrimitive(seq, types.TypeFloating, 8, s.Nullable)
+	return validatePrimitive(SchemeFloat64Name, seq, types.TypeFloating, 8, s.Nullable)
 }
 func (s SchemeFloat64) Decode(seq *access.SeqGetAccess) (any, error) {
-	payload, err := validatePrimitiveAndGetPayload(seq, types.TypeFloating, 8, s.Nullable)
+	payload, err := validatePrimitiveAndGetPayload(SchemeFloat64Name, seq, types.TypeFloating, 8, s.Nullable)
 	if err != nil {
 		return nil, err
 	}
@@ -366,12 +445,10 @@ func SVariableMap(nested ...Scheme) Scheme {
 func ValidateBuffer(buf []byte, chain SchemeChain) error {
 	seq, err := access.NewSeqGetAccess(buf)
 	if err != nil {
-		return fmt.Errorf("ValidateBuffer: failed to initialize accessor: %w", err)
+		return NewSchemeError(ErrInvalidFormat, ChainName, 0, err)
 	}
-
 	for _, scheme := range chain.Schemes {
-		err = scheme.Validate(seq)
-		if err != nil {
+		if err := scheme.Validate(seq); err != nil {
 			return err
 		}
 	}
@@ -381,7 +458,7 @@ func ValidateBuffer(buf []byte, chain SchemeChain) error {
 func DecodeBuffer(buf []byte, chain SchemeChain) (any, error) {
 	seq, err := access.NewSeqGetAccess(buf)
 	if err != nil {
-		return nil, fmt.Errorf("ValidateBuffer: failed to initialize accessor: %w", err)
+		return nil, NewSchemeError(ErrInvalidFormat, ChainName, 0, err)
 	}
 	out := make([]any, 0, len(chain.Schemes))
 	for _, scheme := range chain.Schemes {
@@ -391,12 +468,9 @@ func DecodeBuffer(buf []byte, chain SchemeChain) (any, error) {
 		}
 		out = append(out, val)
 	}
-
-	// flatten if only one scheme
 	if len(out) == 1 {
 		return out[0], nil
 	}
-
 	return out, nil
 }
 
@@ -408,72 +482,84 @@ type SchemeNamedChain struct {
 func DecodeBufferNamed(buf []byte, chain SchemeNamedChain) (any, error) {
 	seq, err := access.NewSeqGetAccess(buf)
 	if err != nil {
-		return nil, fmt.Errorf("ValidateBuffer: failed to initialize accessor: %w", err)
+		return nil, NewSchemeError(ErrInvalidFormat, SchemeNamedChainName, 0, err)
 	}
 	if len(chain.FieldNames) != len(chain.Schemes) {
-		return nil, fmt.Errorf("Scheme FieldNames count and Schemes count mismatch %d!=%d", len(chain.Schemes), len(chain.FieldNames))
+		return nil, NewSchemeError(ErrConstraintViolated, SchemeNamedChainName, 0,
+			fmt.Errorf("FieldNames count %d != Schemes count %d", len(chain.FieldNames), len(chain.Schemes)))
 	}
 	out := make(map[string]any, len(chain.Schemes))
-	i := 0
-	for _, scheme := range chain.Schemes {
+	for i, scheme := range chain.Schemes {
 		val, err := scheme.Decode(seq)
 		if err != nil {
 			return nil, err
 		}
 		out[chain.FieldNames[i]] = val
-		i++
 	}
 	return out, nil
 }
 
-func precheck(pos int, seq *access.SeqGetAccess, tag types.Type, hint int, nullable bool) (int, error) {
-
+func precheck(errorName string, pos int, seq *access.SeqGetAccess, tag types.Type, hint int, nullable bool) (int, error) {
 	typ, width, err := seq.PeekTypeWidth()
 	if err != nil {
-		return 0, fmt.Errorf("ValidateBuffer: peek failed at pos %d: %w", pos, err)
+		return 0, NewSchemeError(ErrConstraintViolated, errorName, pos, err)
 	}
+
 	if typ != tag {
-		return 0, fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected %v, got %v", pos, tag, typ)
+		// Type mismatch
+		return 0, NewSchemeError(ErrConstraintViolated, errorName, pos,
+			fmt.Errorf("type mismatch — expected %v, got %v", tag, typ),
+		)
 	}
+
 	if hint >= 0 && width != hint {
 		if !(nullable && (hint == 0 || hint == -1 || width == 0)) {
-			return 0, fmt.Errorf("ValidateBuffer: width mismatch at pos %d — expected %d, got %d", pos, hint, width)
+			// Width mismatch
+			return 0, NewSchemeError(ErrConstraintViolated, errorName, pos,
+				fmt.Errorf("width mismatch — expected %d, got %d", hint, width),
+			)
 		}
 	}
-	return width, err
+
+	return width, nil
 }
 
 // Helper for primitive validation
-func validatePrimitive(seq *access.SeqGetAccess, tag types.Type, hint int, nullable bool) error {
+func validatePrimitive(errorName string, seq *access.SeqGetAccess, tag types.Type, hint int, nullable bool) error {
 	pos := seq.CurrentIndex()
-	_, err := precheck(pos, seq, tag, hint, nullable)
+
+	_, err := precheck(errorName, pos, seq, tag, hint, nullable)
 	if err != nil {
 		return err
 	}
+
 	if err := seq.Advance(); err != nil {
-		return fmt.Errorf("ValidateBuffer: advance failed at pos %d: %w", pos, err)
+		return NewSchemeError(ErrUnexpectedEOF, errorName, pos, err)
 	}
+
 	return nil
 }
 
-func validatePrimitiveAndGetPayload(seq *access.SeqGetAccess, tag types.Type, hint int, nullable bool) ([]byte, error) {
-
+func validatePrimitiveAndGetPayload(errorName string, seq *access.SeqGetAccess, tag types.Type, hint int, nullable bool) ([]byte, error) {
 	pos := seq.CurrentIndex()
-	width, err := precheck(pos, seq, tag, hint, nullable)
+
+	width, err := precheck(errorName, pos, seq, tag, hint, nullable)
 	if err != nil {
 		return nil, err
 	}
-	var payload []byte = nil
+
+	var payload []byte
 	if width > 0 {
 		payload, err = seq.GetPayload(width)
 		if err != nil {
-			return nil, fmt.Errorf("ValidateBuffer: getting payload failed at pos %d, %w", pos, err)
+			return nil, NewSchemeError(ErrInvalidFormat, errorName, pos, err)
 		}
 	}
 
 	if err := seq.Advance(); err != nil {
-		return nil, fmt.Errorf("ValidateBuffer: advance failed at pos %d: %w", pos, err)
+		return nil, NewSchemeError(ErrUnexpectedEOF, errorName, pos, err)
 	}
+
 	return payload, nil
 }
 
@@ -493,85 +579,94 @@ func SStringLen(width int) Scheme {
 	return SString.WithWidth(width)
 }
 
-func (s SchemeString) CheckFunc(msgError string, test func(payloadStr string) bool) Scheme {
+func (s SchemeString) CheckFunc(code ErrorCode, test func(payloadStr string) bool) Scheme {
 	return SchemeGeneric{
 		ValidateFunc: func(seq *access.SeqGetAccess) error {
 			pos := seq.CurrentIndex()
-			payload, err := validatePrimitiveAndGetPayload(seq, types.TypeString, s.Width, s.IsNullable())
+			payload, err := validatePrimitiveAndGetPayload(SchemeStringName, seq, types.TypeString, s.Width, s.IsNullable())
 			if err != nil {
 				return err
 			}
-			if !test(string(payload)) {
-				return fmt.Errorf("ValidateBuffer: string mismatch at pos %d — %s, got '%s'", pos, msgError, string(payload))
+			str := string(payload)
+			if !test(str) {
+				return NewSchemeError(code, SchemeStringName, pos, StringErrorDetails{Actual: str})
 			}
 			return nil
 		},
 		DecodeFunc: func(seq *access.SeqGetAccess) (any, error) {
 			pos := seq.CurrentIndex()
-			payload, err := validatePrimitiveAndGetPayload(seq, types.TypeString, s.Width, s.IsNullable())
+			payload, err := validatePrimitiveAndGetPayload(SchemeStringName, seq, types.TypeString, s.Width, s.IsNullable())
 			if err != nil {
 				return nil, err
 			}
-			if !test(string(payload)) {
-				return nil, fmt.Errorf("ValidateBuffer: string mismatch at pos %d — %s, got '%s'", pos, msgError, string(payload))
+			str := string(payload)
+			if !test(str) {
+				return nil, NewSchemeError(code, SchemeStringName, pos, StringErrorDetails{Actual: str})
 			}
-			return string(payload), nil
+			return str, nil
 		},
 	}
 }
 
 func (s SchemeString) Match(expected string) Scheme {
-	return s.CheckFunc(fmt.Sprintf("expected %s", expected), func(payloadStr string) bool {
-		return payloadStr == expected
-	})
+	return s.CheckFunc(
+		ErrStringMatch,
+		func(payloadStr string) bool { return payloadStr == expected },
+	)
 }
 
 func (s SchemeString) Prefix(prefix string) Scheme {
-	return s.CheckFunc(fmt.Sprintf("expected prefix %s", prefix), func(payloadStr string) bool {
-		return strings.HasPrefix(payloadStr, prefix)
-	})
+	return s.CheckFunc(
+		ErrStringPrefix,
+		func(payloadStr string) bool { return strings.HasPrefix(payloadStr, prefix) },
+	)
 }
 
 func (s SchemeString) Suffix(suffix string) Scheme {
-	return s.CheckFunc(fmt.Sprintf("expected suffix %s", suffix), func(payloadStr string) bool {
-		return strings.HasSuffix(payloadStr, suffix)
-	})
+	return s.CheckFunc(
+		ErrStringSuffix,
+		func(payloadStr string) bool { return strings.HasSuffix(payloadStr, suffix) },
+	)
+}
+
+func (s SchemeString) Pattern(expr string) Scheme {
+	re := regexp.MustCompile(expr)
+	return s.CheckFunc(
+		ErrStringPattern,
+		func(payloadStr string) bool { return re.MatchString(payloadStr) },
+	)
 }
 
 func (s SchemeString) WithWidth(n int) Scheme {
 	return SchemeString{Width: n}
 }
-
-func (s SchemeString) Pattern(expr string) Scheme {
-	re := regexp.MustCompile(expr)
-	return s.CheckFunc(fmt.Sprintf("expected  match for %s", expr), func(payloadStr string) bool {
-		return re.Match([]byte(payloadStr))
-	})
-}
-
 func (s SchemeInt16) Range(min, max int16) Scheme {
 	return SchemeGeneric{
 		ValidateFunc: func(seq *access.SeqGetAccess) error {
 			pos := seq.CurrentIndex()
-			payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 2, false)
+			payload, err := validatePrimitiveAndGetPayload(SchemeInt16Name, seq, types.TypeInteger, 2, false)
 			if err != nil {
 				return err
 			}
 			val := int16(binary.LittleEndian.Uint16(payload))
 			if val < min || val > max {
-				return fmt.Errorf("ValidateBuffer: value out of range at pos %d — expected %d ≤ x ≤ %d, got %d", pos, min, max, val)
+				return NewSchemeError(ErrOutOfRange, SchemeInt16Name, pos,
+					RangeErrorDetails{Min: int64(min), Max: int64(max), Actual: int64(val)},
+				)
 			}
 			return nil
 		},
 		DecodeFunc: func(seq *access.SeqGetAccess) (any, error) {
 			pos := seq.CurrentIndex()
-			payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 2, false)
+			payload, err := validatePrimitiveAndGetPayload(SchemeInt16Name, seq, types.TypeInteger, 2, false)
 			if err != nil {
 				return nil, err
 			}
 			val := int16(binary.LittleEndian.Uint16(payload))
 			if val < min || val > max {
-				return nil, fmt.Errorf("ValidateBuffer: value out of range at pos %d — expected %d ≤ x ≤ %d, got %d", pos, min, max, val)
+				return nil, NewSchemeError(ErrOutOfRange, SchemeInt16Name, pos,
+					RangeErrorDetails{Min: int64(min), Max: int64(max), Actual: int64(val)},
+				)
 			}
 			return val, nil
 		},
@@ -582,27 +677,32 @@ func (s SchemeInt32) Range(min, max int32) Scheme {
 	return SchemeGeneric{
 		ValidateFunc: func(seq *access.SeqGetAccess) error {
 			pos := seq.CurrentIndex()
-			payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 4, false)
+			payload, err := validatePrimitiveAndGetPayload(SchemeInt32Name, seq, types.TypeInteger, 4, false)
 			if err != nil {
 				return err
 			}
 			val := int32(binary.LittleEndian.Uint32(payload))
 			if val < min || val > max {
-				return fmt.Errorf("ValidateBuffer: value out of range at pos %d — expected %d ≤ x ≤ %d, got %d",
-					pos, min, max, val)
+				return NewSchemeError(ErrOutOfRange, SchemeInt32Name, pos,
+					RangeErrorDetails{Min: int64(min), Max: int64(max), Actual: int64(val)},
+				)
 			}
 			return nil
 		},
 		DecodeFunc: func(seq *access.SeqGetAccess) (any, error) {
 			pos := seq.CurrentIndex()
-			payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 4, false)
+			payload, err := validatePrimitiveAndGetPayload(SchemeInt32Name, seq, types.TypeInteger, 4, false)
 			if err != nil {
 				return nil, err
 			}
 			val := int32(binary.LittleEndian.Uint32(payload))
 			if val < min || val > max {
-				return nil, fmt.Errorf("ValidateBuffer: value out of range at pos %d — expected %d ≤ x ≤ %d, got %d",
-					pos, min, max, val)
+				return nil, NewSchemeError(
+					ErrOutOfRange,
+					SchemeInt32Name,
+					pos,
+					RangeErrorDetails{Min: int64(min), Max: int64(max), Actual: int64(val)},
+				)
 			}
 			return val, nil
 		},
@@ -613,27 +713,29 @@ func (s SchemeInt64) Range(min, max int64) Scheme {
 	return SchemeGeneric{
 		ValidateFunc: func(seq *access.SeqGetAccess) error {
 			pos := seq.CurrentIndex()
-			payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 8, false)
+			payload, err := validatePrimitiveAndGetPayload(SchemeInt64Name, seq, types.TypeInteger, 8, false)
 			if err != nil {
 				return err
 			}
 			val := int64(binary.LittleEndian.Uint64(payload))
 			if val < min || val > max {
-				return fmt.Errorf("ValidateBuffer: value out of range at pos %d — expected %d ≤ x ≤ %d, got %d",
-					pos, min, max, val)
+				return NewSchemeError(ErrOutOfRange, SchemeInt64Name, pos,
+					RangeErrorDetails{Min: min, Max: max, Actual: val},
+				)
 			}
 			return nil
 		},
 		DecodeFunc: func(seq *access.SeqGetAccess) (any, error) {
 			pos := seq.CurrentIndex()
-			payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 8, false)
+			payload, err := validatePrimitiveAndGetPayload(SchemeInt64Name, seq, types.TypeInteger, 8, false)
 			if err != nil {
 				return nil, err
 			}
 			val := int64(binary.LittleEndian.Uint64(payload))
 			if val < min || val > max {
-				return nil, fmt.Errorf("ValidateBuffer: value out of range at pos %d — expected %d ≤ x ≤ %d, got %d",
-					pos, min, max, val)
+				return nil, NewSchemeError(ErrOutOfRange, SchemeInt64Name, pos,
+					RangeErrorDetails{Min: min, Max: max, Actual: val},
+				)
 			}
 			return val, nil
 		},
@@ -646,36 +748,36 @@ func (s SchemeInt64) DateRange(from, to time.Time) Scheme {
 
 	return SchemeGeneric{
 		ValidateFunc: func(seq *access.SeqGetAccess) error {
-			payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 8, false)
+			pos := seq.CurrentIndex()
+			payload, err := validatePrimitiveAndGetPayload(SchemeInt64Name, seq, types.TypeInteger, 8, false)
 			if err != nil {
 				return err
 			}
 			if payload == nil {
-				// Nullable case: allow nil
-				return nil
+				return nil // allow nullable
 			}
 			val := int64(binary.LittleEndian.Uint64(payload))
 			if val < min || val > max {
-				pos := seq.CurrentIndex()
-				return fmt.Errorf("ValidateBuffer: timestamp out of range at pos %d — expected %d ≤ x ≤ %d, got %d",
-					pos, min, max, val)
+				return NewSchemeError(ErrDateOutOfRange, SchemeInt64Name, pos,
+					RangeErrorDetails{Min: min, Max: max, Actual: val},
+				)
 			}
 			return nil
 		},
 		DecodeFunc: func(seq *access.SeqGetAccess) (any, error) {
-			payload, err := validatePrimitiveAndGetPayload(seq, types.TypeInteger, 8, false)
+			pos := seq.CurrentIndex()
+			payload, err := validatePrimitiveAndGetPayload(SchemeInt64Name, seq, types.TypeInteger, 8, false)
 			if err != nil {
 				return nil, err
 			}
 			if payload == nil {
-				// Nullable case: return nil
-				return nil, nil
+				return nil, nil // allow nullable
 			}
 			val := int64(binary.LittleEndian.Uint64(payload))
 			if val < min || val > max {
-				pos := seq.CurrentIndex()
-				return nil, fmt.Errorf("ValidateBuffer: timestamp out of range at pos %d — expected %d ≤ x ≤ %d, got %d",
-					pos, min, max, val)
+				return nil, NewSchemeError(ErrDateOutOfRange, SchemeInt64Name, pos,
+					RangeErrorDetails{Min: min, Max: max, Actual: val},
+				)
 			}
 			return val, nil
 		},
@@ -690,21 +792,23 @@ func SMapUnordered(mappedSchemes map[string]Scheme) Scheme {
 	return SchemeMapUnordered{Fields: mappedSchemes}
 }
 
-func (s SchemeMapUnordered) Validate(seq *access.SeqGetAccess) error {
+// Constant scheme name for unordered maps
 
+func (s SchemeMapUnordered) Validate(seq *access.SeqGetAccess) error {
 	pos := seq.CurrentIndex()
 	typ, _, err := seq.PeekTypeWidth()
 	if err != nil {
-		return fmt.Errorf("ValidateBuffer: peek failed at pos %d: %w", pos, err)
+		return NewSchemeError(ErrInvalidFormat, SchemeMapUnorderedName, pos, err)
 	}
 	if typ != types.TypeMap {
-		return fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected TypeMap, got %v", pos, typ)
+		return NewSchemeError(ErrConstraintViolated, SchemeMapUnorderedName, pos,
+			fmt.Errorf("expected TypeMap, got %v", typ))
 	}
 
 	if len(s.Fields) > 0 {
 		subseq, err := seq.PeekNestedSeq()
 		if err != nil {
-			return fmt.Errorf("ValidateBuffer: nested peek failed at pos %d: %w", pos, err)
+			return NewSchemeError(ErrInvalidFormat, SchemeMapUnorderedName, pos, err)
 		}
 		seen := make(map[string]bool)
 
@@ -714,95 +818,95 @@ func (s SchemeMapUnordered) Validate(seq *access.SeqGetAccess) error {
 				break
 			}
 			if err != nil {
-				if keyType == types.TypeEnd {
-					break
-				}
-				return fmt.Errorf("ValidateBuffer: failed to read key at pos %d: %w", pos, err)
+				return NewSchemeError(ErrInvalidFormat, SchemeMapUnorderedName, pos, err)
 			}
 			if keyType != types.TypeString {
-				return fmt.Errorf("ValidateBuffer: expected string key at pos %d, got %v", pos, keyType)
+				return NewSchemeError(ErrConstraintViolated, SchemeMapUnorderedName, pos,
+					fmt.Errorf("got %v", keyType))
 			}
 			key := string(keyPayload)
 			seen[key] = true
 
 			if validator, ok := s.Fields[key]; ok {
-				err = validator.Validate(subseq)
-				if err != nil {
-					return fmt.Errorf("ValidateBuffer: value validation failed for key '%s': %w", key, err)
+				if err := validator.Validate(subseq); err != nil {
+					return err // child error already structured
 				}
 			} else {
 				if err := subseq.Advance(); err != nil {
-					return fmt.Errorf("ValidateBuffer: failed to skip value for unknown key '%s': %w", key, err)
+					return NewSchemeError(ErrUnexpectedEOF, SchemeMapUnorderedName, pos, err)
 				}
 			}
 		}
 
 		for key := range s.Fields {
 			if !seen[key] {
-				return fmt.Errorf("ValidateBuffer: missing expected key '%s' at pos %d", key, pos)
+				return NewSchemeError(ErrConstraintViolated, SchemeMapUnorderedName, pos,
+					fmt.Errorf("missing expected key '%s'", key))
 			}
 		}
 	}
+
 	if err := seq.Advance(); err != nil {
-		return fmt.Errorf("ValidateBuffer: advance failed at pos %d: %w", pos, err)
+		return NewSchemeError(ErrUnexpectedEOF, SchemeMapUnorderedName, pos, err)
 	}
 	return nil
 }
-
 func (s SchemeMapUnordered) Decode(seq *access.SeqGetAccess) (any, error) {
-
 	pos := seq.CurrentIndex()
 	typ, _, err := seq.PeekTypeWidth()
 	if err != nil {
-		return nil, fmt.Errorf("ValidateBuffer: peek failed at pos %d: %w", pos, err)
+		return nil, NewSchemeError(ErrInvalidFormat, SchemeMapUnorderedName, pos, err)
 	}
 	if typ != types.TypeMap {
-		return nil, fmt.Errorf("ValidateBuffer: type mismatch at pos %d — expected TypeMap, got %v", pos, typ)
+		return nil, NewSchemeError(ErrConstraintViolated, SchemeMapUnorderedName, pos,
+			fmt.Errorf("expected TypeMap, got %v", typ))
 	}
-	var out map[string]any = nil
-	if len(s.Fields) > 0 {
 
+	var out map[string]any
+	if len(s.Fields) > 0 {
 		subseq, err := seq.PeekNestedSeq()
 		if err != nil {
-			return nil, fmt.Errorf("ValidateBuffer: nested peek failed at pos %d: %w", pos, err)
+			return nil, NewSchemeError(ErrInvalidFormat, SchemeMapUnorderedName, pos, err)
 		}
 		out = make(map[string]any, subseq.ArgCount()/2)
+
 		for {
 			keyPayload, keyType, err := subseq.Next()
 			if keyType == types.TypeEnd {
 				break
 			}
 			if err != nil {
-				if keyType == types.TypeEnd {
-					break
-				}
-				return nil, fmt.Errorf("ValidateBuffer: failed to read key at pos %d: %w", pos, err)
+				return nil, NewSchemeError(ErrInvalidFormat, SchemeMapUnorderedName, pos, err)
 			}
 			if keyType != types.TypeString {
-				return nil, fmt.Errorf("ValidateBuffer: expected string key at pos %d, got %v", pos, keyType)
+				return nil, NewSchemeError(ErrConstraintViolated, SchemeMapUnorderedName, pos,
+					fmt.Errorf("got %v", keyType))
 			}
+
 			key := string(keyPayload)
 			if validator, ok := s.Fields[key]; ok {
 				val, err := validator.Decode(subseq)
 				if err != nil {
-					return nil, fmt.Errorf("ValidateBuffer: value validation failed for key '%s': %w", key, err)
+					return nil, err // child error already structured
 				}
 				out[key] = val
 			} else {
 				if err := subseq.Advance(); err != nil {
-					return nil, fmt.Errorf("ValidateBuffer: failed to skip value for unknown key '%s': %w", key, err)
+					return nil, NewSchemeError(ErrUnexpectedEOF, SchemeMapUnorderedName, pos, err)
 				}
 			}
 		}
 
 		for key := range s.Fields {
-			if _, ok := out["a"]; !ok {
-				return nil, fmt.Errorf("ValidateBuffer: missing expected key '%s' at pos %d", key, pos)
+			if _, ok := out[key]; !ok {
+				return nil, NewSchemeError(ErrConstraintViolated, SchemeMapUnorderedName, pos,
+					fmt.Errorf("missing expected key '%s'", key))
 			}
 		}
 	}
+
 	if err := seq.Advance(); err != nil {
-		return nil, fmt.Errorf("ValidateBuffer: advance failed at pos %d: %w", pos, err)
+		return nil, NewSchemeError(ErrUnexpectedEOF, SchemeMapUnorderedName, pos, err)
 	}
 	return out, nil
 }
@@ -831,65 +935,56 @@ func (s TupleScheme) IsNullable() bool {
 }
 
 func (s TupleScheme) Validate(seq *access.SeqGetAccess) error {
-
 	pos := seq.CurrentIndex()
-	_, err := precheck(pos, seq, types.TypeTuple, -1, s.IsNullable())
+	_, err := precheck(TupleSchemeName, pos, seq, types.TypeTuple, -1, s.IsNullable())
 	if err != nil {
 		return err
 	}
 	w := len(s.Schema)
 	if w != 0 {
-
 		sub, err := seq.PeekNestedSeq()
 		if err != nil {
-			return fmt.Errorf("ValidateBuffer: nested peek failed at pos %d: %w", pos, err)
+			return NewSchemeError(ErrInvalidFormat, TupleSchemeName, pos, err)
 		}
 		if w > 0 && sub.ArgCount() != w && !s.VariableLength {
-			return fmt.Errorf("ValidateBuffer: container item count mistmatch at pos %d: %d!=%d", pos, w, sub.ArgCount())
+			return NewSchemeError(ErrConstraintViolated, TupleSchemeName, pos,
+				fmt.Errorf("container item count mismatch: %d!=%d", w, sub.ArgCount()))
 		}
-
-		subState := sub
 		for _, sch := range s.Schema {
-			err = sch.Validate(subState)
-			if err != nil {
-				return fmt.Errorf("ValidateBuffer: nested validation failed at pos %d: %w", pos, err)
+			if err := sch.Validate(sub); err != nil {
+				return NewSchemeError(ErrInvalidFormat, TupleSchemeName, pos, err)
 			}
 		}
 	}
-
 	if err := seq.Advance(); err != nil {
-		return fmt.Errorf("ValidateBuffer: advance failed at pos %d: %w", pos, err)
+		return NewSchemeError(ErrUnexpectedEOF, TupleSchemeName, pos, err)
 	}
-
 	return nil
 }
 
 func (s TupleScheme) Decode(seq *access.SeqGetAccess) (any, error) {
-
 	pos := seq.CurrentIndex()
-	_, err := precheck(pos, seq, types.TypeTuple, -1, s.IsNullable())
+	_, err := precheck(TupleSchemeName, pos, seq, types.TypeTuple, -1, s.IsNullable())
 	if err != nil {
 		return nil, err
 	}
-
-	var out []any = nil
+	var out []any
 	w := len(s.Schema)
 	if w != 0 {
 		sub, err := seq.PeekNestedSeq()
 		if err != nil {
-			return nil, fmt.Errorf("ValidateBuffer: nested peek failed at pos %d: %w", pos, err)
+			return nil, NewSchemeError(ErrInvalidFormat, TupleSchemeName, pos, err)
 		}
 		if w > 0 && sub.ArgCount() != w && !s.VariableLength {
-			return nil, fmt.Errorf("ValidateBuffer: container item count mistmatch at pos %d: %d!=%d", pos, w, sub.ArgCount())
+			return nil, NewSchemeError(ErrConstraintViolated, TupleSchemeName, pos,
+				fmt.Errorf("container item count mismatch: %d!=%d", w, sub.ArgCount()))
 		}
-
 		out = make([]any, 0, sub.ArgCount())
 		for _, sch := range s.Schema {
 			v, err := sch.Decode(sub)
 			if err != nil {
-				return nil, fmt.Errorf("ValidateBuffer: nested validation failed at pos %d: %w", pos, err)
+				return nil, NewSchemeError(ErrInvalidFormat, TupleSchemeName, pos, err)
 			}
-			// flatten only if flag is set and scheme is SRepeat
 			if s.Flatten {
 				if _, ok := sch.(SRepeatScheme); ok {
 					if arr, ok := v.([]any); ok {
@@ -898,15 +993,12 @@ func (s TupleScheme) Decode(seq *access.SeqGetAccess) (any, error) {
 					}
 				}
 			}
-
 			out = append(out, v)
 		}
 	}
-
 	if err := seq.Advance(); err != nil {
-		return nil, fmt.Errorf("ValidateBuffer: advance failed at pos %d: %w", pos, err)
+		return nil, NewSchemeError(ErrUnexpectedEOF, TupleSchemeName, pos, err)
 	}
-
 	return out, nil
 }
 
@@ -959,68 +1051,57 @@ func (s TupleSchemeNamed) IsNullable() bool {
 }
 
 func (s TupleSchemeNamed) Validate(seq *access.SeqGetAccess) error {
-
 	pos := seq.CurrentIndex()
-	_, err := precheck(pos, seq, types.TypeTuple, -1, s.IsNullable())
+	_, err := precheck(TupleSchemeNamedName, pos, seq, types.TypeTuple, -1, s.IsNullable())
 	if err != nil {
 		return err
 	}
 	w := len(s.Schema)
 	if w != 0 {
-
 		sub, err := seq.PeekNestedSeq()
 		if err != nil {
-			return fmt.Errorf("ValidateBuffer: nested peek failed at pos %d: %w", pos, err)
+			return NewSchemeError(ErrInvalidFormat, TupleSchemeNamedName, pos, err)
 		}
 		if w > 0 && sub.ArgCount() != w {
-			return fmt.Errorf("ValidateBuffer: container item count mistmatch at pos %d: %d!=%d", pos, w, sub.ArgCount())
+			return NewSchemeError(ErrConstraintViolated, TupleSchemeNamedName, pos,
+				fmt.Errorf("container item count mismatch: %d!=%d", w, sub.ArgCount()))
 		}
-
-		subState := sub
 		for _, sch := range s.Schema {
-			err = sch.Validate(subState)
-			if err != nil {
-				return fmt.Errorf("ValidateBuffer: nested validation failed at pos %d: %w", pos, err)
+			if err := sch.Validate(sub); err != nil {
+				return NewSchemeError(ErrInvalidFormat, TupleSchemeNamedName, pos, err)
 			}
 		}
 	}
-
 	if err := seq.Advance(); err != nil {
-		return fmt.Errorf("ValidateBuffer: advance failed at pos %d: %w", pos, err)
+		return NewSchemeError(ErrUnexpectedEOF, TupleSchemeNamedName, pos, err)
 	}
-
 	return nil
 }
 
 func (s TupleSchemeNamed) Decode(seq *access.SeqGetAccess) (any, error) {
 	pos := seq.CurrentIndex()
-	_, err := precheck(pos, seq, types.TypeTuple, -1, s.IsNullable())
+	_, err := precheck(TupleSchemeNamedName, pos, seq, types.TypeTuple, -1, s.IsNullable())
 	if err != nil {
 		return nil, err
 	}
 
 	out := make(map[string]any)
 	w := len(s.Schema)
-
 	if w > 0 {
 		sub, err := seq.PeekNestedSeq()
 		if err != nil {
-			return nil, fmt.Errorf("Decode: nested peek failed at pos %d: %w", pos, err)
+			return nil, NewSchemeError(ErrInvalidFormat, TupleSchemeNamedName, pos, err)
 		}
-
-		// strict vs variable-length
 		if !s.VariableLength && sub.ArgCount() != w {
-			return nil, fmt.Errorf("Decode: item count mismatch at pos %d: %d!=%d", pos, w, sub.ArgCount())
+			return nil, NewSchemeError(ErrConstraintViolated, TupleSchemeNamedName, pos,
+				fmt.Errorf("item count mismatch: %d!=%d", w, sub.ArgCount()))
 		}
-
 		for i, sch := range s.Schema {
 			v, err := sch.Decode(sub)
 			if err != nil {
-				return nil, fmt.Errorf("Decode: nested decode failed for field '%s' at pos %d: %w",
-					s.FieldNames[i], pos, err)
+				return nil, NewSchemeError(ErrInvalidFormat, TupleSchemeNamedName, pos,
+					fmt.Errorf("nested decode failed for field '%s'", s.FieldNames[i]))
 			}
-
-			// flatten only if flag is set and scheme is repeat
 			if s.Flatten {
 				if _, ok := sch.(SRepeatScheme); ok {
 					if arr, ok := v.([]any); ok {
@@ -1031,15 +1112,12 @@ func (s TupleSchemeNamed) Decode(seq *access.SeqGetAccess) (any, error) {
 					}
 				}
 			}
-
 			out[s.FieldNames[i]] = v
 		}
 	}
-
 	if err := seq.Advance(); err != nil {
-		return nil, fmt.Errorf("Decode: advance failed at pos %d: %w", pos, err)
+		return nil, NewSchemeError(ErrUnexpectedEOF, TupleSchemeNamedName, pos, err)
 	}
-
 	return out, nil
 }
 
@@ -1064,80 +1142,64 @@ func (s SRepeatScheme) IsNullable() bool {
 }
 
 func (s SRepeatScheme) Validate(seq *access.SeqGetAccess) error {
-	var err error
-	i := 0
-	argCount := seq.ArgCount() - seq.CurrentIndex()
+	pos := seq.CurrentIndex()
+	argCount := seq.ArgCount() - pos
 
-	// enforce minimum upfront
 	if s.min != -1 && argCount < s.min {
-		return fmt.Errorf("Expected minimum %d elements, but only %d remain", s.min, argCount)
+		return NewSchemeError(ErrConstraintViolated, SRepeatSchemeName, pos,
+			fmt.Errorf("expected minimum %d elements, but only %d remain", s.min, argCount))
 	}
 
-	// decide maximum iterations
-	maxIter := argCount // default: consume everything available
-	if s.max != -1 {
-		if s.max < argCount {
-			maxIter = s.max
-		}
+	maxIter := argCount
+	if s.max != -1 && s.max < argCount {
+		maxIter = s.max
 	}
 
+	i := 0
 outer:
 	for {
-
 		for _, scheme := range s.Schema {
-			err = scheme.Validate(seq)
-			if err != nil {
-				return err
+			if err := scheme.Validate(seq); err != nil {
+				return NewSchemeError(ErrInvalidFormat, SRepeatSchemeName, pos, err)
 			}
 			if i >= maxIter {
 				break outer
 			}
 			i++
 		}
-
 	}
-
 	return nil
 }
 
 func (s SRepeatScheme) Decode(seq *access.SeqGetAccess) (any, error) {
-	i := 0
+	pos := seq.CurrentIndex()
+	argCount := seq.ArgCount() - pos
 
-	argCount := seq.ArgCount() - seq.CurrentIndex()
-
-	// enforce minimum upfront
 	if s.min != -1 && argCount < s.min {
-		return nil, fmt.Errorf("Expected minimum %d elements, but only %d remain", s.min, argCount)
+		return nil, NewSchemeError(ErrConstraintViolated, SRepeatSchemeName, pos,
+			fmt.Errorf("expected minimum %d elements, but only %d remain", s.min, argCount))
 	}
 
-	// decide maximum iterations
-	maxIter := argCount // default: consume everything available
-	if s.max != -1 {
-		if s.max < argCount {
-			maxIter = s.max
-		}
+	maxIter := argCount
+	if s.max != -1 && s.max < argCount {
+		maxIter = s.max
 	}
 
-	// flat slice of decoded elements, capacity = maxIter
 	out := make([]any, 0, maxIter)
-
+	i := 0
 outer:
 	for {
 		for _, scheme := range s.Schema {
-			// stop if we've reached the max permitted elements
 			if i >= maxIter {
 				break outer
 			}
-
 			val, err := scheme.Decode(seq)
 			if err != nil {
-				return nil, err
+				return nil, NewSchemeError(ErrInvalidFormat, SRepeatSchemeName, pos, err)
 			}
-
 			out = append(out, val)
 			i++
 		}
 	}
-
 	return out, nil
 }
