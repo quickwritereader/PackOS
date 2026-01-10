@@ -193,8 +193,8 @@ func TestUsage1_WithSChainMax(t *testing.T) {
 				// largeArray: solid array of {index, value}
 				STupleValFlatten(SRepeat(1, -1, STupleNamedVal(
 					[]string{"index", "value"},
-					SFloat64, // index (JSON numbers decode as float64)
-					SString,  // value
+					SInt8,   // index
+					SString, // value
 				))),
 			),
 		),
@@ -209,7 +209,7 @@ func TestUsage1_WithSChainMax(t *testing.T) {
 	decodedBack, err := DecodeBufferNamed(encoded, chain)
 	assert.NoError(t, err, "Decoding with SChain should succeed")
 
-	// --- Log size comparison ---
+	// --- Log size comparison ---  2509 -> 1411 43.7% reduction
 	t.Logf("[PACKING LOG] Original JSON length: %d bytes, Packed buffer length: %d bytes", len(testJson), len(encoded))
 	// --- Stringwise comparison ---
 	// Marshal both to canonical JSON strings

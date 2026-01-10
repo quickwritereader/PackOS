@@ -319,6 +319,58 @@ fmt.Println("DecodedFlat:", decodedFlat)
 ```
 
 ```go
+// Encode with schema example
+expected := pack.Pack(
+	pack.PackTuple(
+		pack.PackInt32(2025),
+		pack.PackBool(false),
+		pack.PackString("az"),
+	),
+	pack.PackTuple(
+		pack.PackInt16(7),
+		pack.PackBool(true),
+		pack.PackString("go"),
+	),
+)
+
+// Schema with named tuples
+chain := SchemeNamedChain{
+	SchemeChain: SChain(
+		STupleNamed(
+			[]string{"year", "flag", "code"},
+			SInt32,
+			SBool,
+			SStringLen(len("az")),
+		),
+		STupleNamed(
+			[]string{"num", "flag", "lang"},
+			SInt16,
+			SBool,
+			SStringLen(len("go")),
+		),
+	),
+	FieldNames: []string{"firstTuple", "secondTuple"},
+}
+
+// Value to encode: map with named fields
+val := map[string]any{
+	"firstTuple": map[string]any{
+		"year": int32(2025),
+		"flag": false,
+		"code": "az",
+	},
+	"secondTuple": map[string]any{
+		"num":  int16(7),
+		"flag": true,
+		"lang": "go",
+	},
+}
+
+actual, err := EncodeValueNamed(val, chain) 
+fmt.Println("Encoded Named:", actual)
+```
+
+```go
 // Define scheme in JSON form
 schemeJSON := SchemeJSON{
 Type: "repeat",
