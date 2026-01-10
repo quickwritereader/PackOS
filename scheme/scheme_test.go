@@ -523,7 +523,7 @@ func TestDecodePackedTuples_WithRepeat(t *testing.T) {
 
 	// Instead of two fixed tuples, allow repetition
 	chain := SChain(
-		SRepeat(1, -1, // at least 1, unlimited max
+		SRepeat(2, 2, // 2 times
 			STuple(
 				SInt32,
 				SBool,
@@ -663,4 +663,434 @@ func TestDecodeNamedTupleValAndFlattened(t *testing.T) {
 	fmt.Println("DecodedFlat:", decodedFlat)
 	assert.EqualValues(t, expectedFlat, decodedFlat,
 		"Flattened schema should expand repeated field inline")
+}
+
+func TestEncodePackedTuples(t *testing.T) {
+	expected := pack.Pack(
+		pack.PackTuple(
+			pack.PackInt32(2025),
+			pack.PackBool(false),
+			pack.PackString("az"),
+		),
+		pack.PackTuple(
+			pack.PackInt16(7),
+			pack.PackBool(true),
+			pack.PackString("go"),
+		),
+	)
+
+	chain := SChain(
+		STuple(
+			SInt32,
+			SBool,
+			SStringLen(len("az")),
+		),
+		STuple(
+			SInt16,
+			SBool,
+			SStringLen(len("go")),
+		),
+	)
+
+	val := []any{
+		[]any{int32(2025), false, "az"},
+		[]any{int16(7), true, "go"},
+	}
+
+	actual, err := EncodeValue(val, chain)
+	if err != nil {
+		fmt.Println(err)
+	}
+	assert.Equal(t, expected, actual)
+}
+
+func TestEncodeFlattenedTuple(t *testing.T) {
+	// Expected packed buffer: (42, "alpha", true, false, true)
+	expected := pack.Pack(pack.PackTuple(
+		pack.PackInt32(42),
+		pack.PackString("alpha"),
+		pack.PackBool(true),
+		pack.PackBool(false),
+		pack.PackBool(true),
+	))
+
+	// Flattened schema: repeated field expands inline
+	chainFlat := SChain(
+		STupleNamedValFlattened(
+			[]string{"id", "name", "flag"},
+			SInt32,
+			SString,
+			SRepeat(1, -1, SBool),
+		),
+	)
+
+	// Value to encode: flattened map with flag_0, flag_1, flag_2
+	val := map[string]any{
+		"id":     int32(42),
+		"name":   "alpha",
+		"flag_0": true,
+		"flag_1": false,
+		"flag_2": true,
+	}
+
+	actual, err := EncodeValue(val, chainFlat)
+	assert.NoError(t, err, "Flattened named tuple encode should succeed")
+
+	fmt.Println("EncodedFlat:", actual)
+	assert.Equal(t, expected, actual)
+}
+
+func TestEncodePackedTuples_WithRepeat(t *testing.T) {
+	// Expected packed buffer: four tuples, two repetitions of the pair
+	expected := pack.Pack(
+		pack.PackTuple(
+			pack.PackInt32(2025),
+			pack.PackBool(false),
+			pack.PackString("az"),
+		),
+		pack.PackTuple(
+			pack.PackInt16(7),
+			pack.PackBool(true),
+			pack.PackString("go"),
+		),
+		pack.PackTuple(
+			pack.PackInt32(111),
+			pack.PackBool(true),
+			pack.PackString("xx"),
+		),
+		pack.PackTuple(
+			pack.PackInt16(222),
+			pack.PackBool(false),
+			pack.PackString("yy"),
+		),
+	)
+
+	// Schema: repeat the pair of tuples twice
+	chain := SChain(
+		SRepeat(2, 2,
+			STuple(
+				SInt32,
+				SBool,
+				SString,
+			),
+			STuple(
+				SInt16,
+				SBool,
+				SString,
+			),
+		),
+	)
+
+	// Values to encode: slice of tuples
+	val := []any{
+		[]any{int32(2025), false, "az"},
+		[]any{int16(7), true, "go"},
+		[]any{int32(111), true, "xx"},
+		[]any{int16(222), false, "yy"},
+	}
+
+	actual, err := EncodeValue(val, chain)
+	assert.NoError(t, err, "Encoding should succeed with repeat scheme")
+
+	fmt.Println("Encoded:", actual)
+
+	assert.Equal(t, expected, actual)
+}
+
+func TestEncodeTupleWithRepeatField_Flattened(t *testing.T) {
+	// Expected packed buffer: (42, "alpha", true, false, true)
+	expected := pack.Pack(pack.PackTuple(
+		pack.PackInt32(42),
+		pack.PackString("alpha"),
+		pack.PackBool(true),
+		pack.PackBool(false),
+		pack.PackBool(true),
+	))
+
+	chain1 := SChain(
+		STupleVal(
+			SInt32,                // ID
+			SString,               // Name
+			SRepeat(1, -1, SBool), // repeated field inside tuple
+		),
+	)
+
+	// Flattened schema: repeated field expands inline
+	chain2 := SChain(
+		STupleValFlatten(
+			SInt32,                // ID
+			SString,               // Name
+			SRepeat(1, -1, SBool), // repeated field inside tuple
+		),
+	)
+
+	// Value to encode: repeated field provided as slice, expanded inline by flatten
+	val := []any{
+		int32(42),
+		"alpha",
+		[]any{true, false, true},
+	}
+
+	actual, err := EncodeValue(val, chain1)
+	assert.NoError(t, err, "Encoding should succeed with flattened repeat inside tuple")
+
+	fmt.Println("Encoded Flattened:", actual)
+
+	assert.Equal(t, expected, actual)
+
+	val2 := []any{
+		int32(42),
+		"alpha", true, false, true,
+	}
+
+	actual2, err := EncodeValue(val2, chain2)
+
+	assert.Equal(t, expected, actual2)
+
+}
+
+func TestEncodeTupleWithRepeatField_Flattened_NoMaxBeforeEnd(t *testing.T) {
+	// Schema: repeat comes before the last field, but max is not set
+	chain := SChain(
+		STupleValFlatten(
+			SInt32,                // ID
+			SRepeat(1, -1, SBool), // repeated field BEFORE the last element, no max
+			SString,               // Name
+		),
+	)
+
+	// Value to encode: ID, repeated flags, then name
+	val := []any{
+		int32(42),
+		true, false, true,
+		"alpha",
+	}
+
+	actual, err := EncodeValue(val, chain)
+
+	// Expect an error because repeat is not last and max < 1
+	assert.Error(t, err, "Encoding should fail when repeat is not last and max is missing")
+	assert.Nil(t, actual, "No buffer should be produced")
+}
+
+func TestEncodeTupleWithRepeatField_Flattened_WithMaxBeforeEnd(t *testing.T) {
+	// Expected packed buffer: (42, true, false, "alpha")
+	expected := pack.Pack(pack.PackTuple(
+		pack.PackInt32(42),
+		pack.PackBool(true),
+		pack.PackBool(false),
+		pack.PackString("alpha"),
+	))
+
+	// Schema: repeat comes before the last field, with max=2
+	chain := SChain(
+		STupleValFlatten(
+			SInt32,               // ID
+			SRepeat(2, 2, SBool), // exactly 2 booleans before the last element
+			SString,              // Name
+		),
+	)
+
+	// Value to encode: ID, two flags, then name
+	val := []any{
+		int32(42),
+		true, false,
+		"alpha",
+	}
+
+	actual, err := EncodeValue(val, chain)
+	assert.NoError(t, err, "Encoding should succeed when repeat is not last but max is provided")
+
+	fmt.Println("Encoded Flattened WithMax:", actual)
+
+	assert.Equal(t, expected, actual,
+		"Encoder should consume exactly max repeated values before the last field")
+}
+
+func TestEncodePackedStructure(t *testing.T) {
+	// Expected packed buffer
+	expected := pack.Pack(
+		pack.PackInt16(12345),
+		pack.PackFloat32(3.14),
+		pack.PackInt64(9876543210),
+		pack.PackBool(true),
+		pack.PackMapSorted{
+			"meta": pack.PackMapSorted{
+				"user": pack.PackByteArray([]byte("alice")),
+				"role": pack.PackByteArray([]byte("admin")),
+			},
+			"name": pack.PackString("gopher"),
+		},
+	)
+
+	// Schema definition
+	chain := SChain(
+		SInt16.Range(0, 20000),
+		SFloat32,
+		SInt64,
+		SBool,
+		SMap(
+			SString.Match("meta"), // key
+			SMap(
+				SString.Match("role"),
+				SBytes(len("admin")), // key → value
+				SString.Match("user"),
+				SBytes(len("alice")),
+			),
+			SString.Match("name"),     // key
+			SStringLen(len("gopher")), // value
+		),
+	)
+
+	// Value to encode
+	val := []any{
+		int16(12345),
+		float32(3.14),
+		int64(9876543210),
+		true,
+		map[string]any{
+			"meta": map[string]any{
+				"role": []byte("admin"),
+				"user": []byte("alice"),
+			},
+			"name": "gopher",
+		},
+	}
+
+	actual, err := EncodeValue(val, chain)
+	assert.NoError(t, err, "Encoding packed structure should succeed")
+
+	fmt.Println("Encoded:", actual)
+
+	assert.Equal(t, expected, actual,
+		"Encoder should produce packed structure matching expected buffer")
+}
+
+func TestEncodePackedStructure_WithInvalidValues(t *testing.T) {
+
+	// Schema with constraints
+	chain := SChain(
+		SMap(
+			SString.Match("meta"),
+			SMapUnordered(map[string]Scheme{
+				"user": SBytes(len("alice")),
+				"role": SString.Pattern(`^(admin|guest)$`),
+				"age":  SInt32.Range(18, 99),
+			}),
+			SString.Match("name"),
+			SString.WithWidth(len("gopher")),
+		),
+	)
+
+	// Value to encode
+	val := map[string]any{
+		"meta": map[string]any{
+			"user": []byte("alice"),
+			"role": "adminX",  // invalid
+			"age":  int32(17), // out of range
+		},
+		"name": "gopher",
+	}
+
+	actual, err := EncodeValue(val, chain)
+
+	// We expect an error because constraints are violated
+	assert.Error(t, err, "Encoding should fail due to invalid pattern and out-of-range value")
+	assert.Nil(t, actual, "No buffer should be produced when constraints fail")
+
+}
+
+func TestEncodePackedStructure_WithValidValues(t *testing.T) {
+
+	// Schema with constraints
+	chain := SChain(
+		SMap(
+			SString.Match("meta"),
+			SMapUnordered(map[string]Scheme{
+				"user": SBytes(len("alice")),
+				"role": SString.Pattern(`^(admin|guest)$`),
+				"age":  SInt32.Range(18, 99),
+			}),
+			SString.Match("name"),
+			SString.WithWidth(len("gopher")),
+		),
+	)
+
+	// Value to encode
+	val := map[string]any{
+		"meta": map[string]any{
+			"user": []byte("alice"),
+			"role": "admin",   // valid
+			"age":  int32(25), // valid
+		},
+		"name": "gopher",
+	}
+	actual, err := EncodeValue(val, chain)
+	assert.NoError(t, err, "Encoding should succeed with valid values")
+
+	fmt.Println("Encoded Valid:", actual)
+
+	retVal, err := DecodeBuffer(actual, chain)
+
+	fmt.Println(retVal, val)
+
+	assert.EqualValues(t, val, retVal)
+
+}
+
+func TestEncodePackedTuplesNamed(t *testing.T) {
+	// Expected packed buffer: two tuples
+	expected := pack.Pack(
+		pack.PackTuple(
+			pack.PackInt32(2025),
+			pack.PackBool(false),
+			pack.PackString("az"),
+		),
+		pack.PackTuple(
+			pack.PackInt16(7),
+			pack.PackBool(true),
+			pack.PackString("go"),
+		),
+	)
+
+	// Schema with named tuples
+	chain := SchemeNamedChain{
+		SchemeChain: SChain(
+			STupleNamed(
+				[]string{"year", "flag", "code"},
+				SInt32,
+				SBool,
+				SStringLen(len("az")),
+			),
+			STupleNamed(
+				[]string{"num", "flag", "lang"},
+				SInt16,
+				SBool,
+				SStringLen(len("go")),
+			),
+		),
+		FieldNames: []string{"firstTuple", "secondTuple"},
+	}
+
+	// Value to encode: map with named fields
+	val := map[string]any{
+		"firstTuple": map[string]any{
+			"year": int32(2025),
+			"flag": false,
+			"code": "az",
+		},
+		"secondTuple": map[string]any{
+			"num":  int16(7),
+			"flag": true,
+			"lang": "go",
+		},
+	}
+
+	actual, err := EncodeValueNamed(val, chain)
+	assert.NoError(t, err, "Encoding should succeed for two named packed tuples")
+
+	fmt.Println("Encoded Named:", actual)
+
+	assert.Equal(t, expected, actual,
+		"Encoder should produce packed tuples matching expected buffer")
 }
