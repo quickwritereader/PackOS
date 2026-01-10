@@ -2,6 +2,7 @@ package scheme
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"regexp"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/quickwritereader/PackOS/access"
 	"github.com/quickwritereader/PackOS/types"
+	"github.com/quickwritereader/PackOS/utils"
 )
 
 type ErrorCode int
@@ -19,6 +21,7 @@ const (
 	ErrInvalidFormat                // decoding failed due to invalid format
 	ErrUnexpectedEOF                // sequence ended unexpectedly while advancing or reading
 	ErrConstraintViolated           // validation rule failed (width, type mismatch, nullable constraint)
+	ErrEncode
 
 	// String‑specific validation codes
 	ErrStringMismatch // generic string mismatch
@@ -31,6 +34,8 @@ const (
 	ErrOutOfRange     // integer value out of allowed range
 	ErrDateOutOfRange // timestamp/date value out of allowed range
 )
+
+var ErrTypeMisMatch error = errors.New("Type Mismatch")
 
 type SchemeError struct {
 	Code     ErrorCode
@@ -60,9 +65,9 @@ func (e StringErrorDetails) Error() string {
 
 func formatError(code ErrorCode, field string, pos int, inner error) string {
 	if inner != nil {
-		return fmt.Sprintf("%d: error in %s position %d, innerError %s", code, field, pos, inner)
+		return fmt.Sprintf("%d:%s pos %d { %s }", code, field, pos, inner)
 	}
-	return fmt.Sprintf("%d: error in %s position %d", code, field, pos)
+	return fmt.Sprintf("%d:%s pos %d", code, field, pos)
 }
 
 func (v *SchemeError) Error() string {
@@ -80,6 +85,7 @@ func NewSchemeError(code ErrorCode, field string, pos int, inner error) *SchemeE
 type Scheme interface {
 	Validate(seq *access.SeqGetAccess) error
 	Decode(seq *access.SeqGetAccess) (any, error)
+	Encode(put *access.PutAccess, val any) error
 }
 
 const (
@@ -107,6 +113,7 @@ const (
 type SchemeGeneric struct {
 	ValidateFunc func(seq *access.SeqGetAccess) error
 	DecodeFunc   func(seq *access.SeqGetAccess) (any, error)
+	EncodeFunc   func(put *access.PutAccess, val any) error
 }
 
 func (f SchemeGeneric) Validate(seq *access.SeqGetAccess) error {
@@ -114,6 +121,10 @@ func (f SchemeGeneric) Validate(seq *access.SeqGetAccess) error {
 }
 func (f SchemeGeneric) Decode(seq *access.SeqGetAccess) (any, error) {
 	return f.DecodeFunc(seq)
+}
+
+func (f SchemeGeneric) Encode(put *access.PutAccess, val any) error {
+	return f.EncodeFunc(put, val)
 }
 
 type SchemeAny struct{}
@@ -126,7 +137,7 @@ func (s SchemeAny) Validate(seq *access.SeqGetAccess) error {
 }
 
 func (s SchemeAny) Decode(seq *access.SeqGetAccess) (any, error) {
-	v, err := access.DecodeTupleGeneric(seq, false)
+	v, err := access.DecodeTupleGeneric(seq, true)
 	if err != nil {
 		return nil, NewSchemeError(ErrInvalidFormat, SchemeAnyName, seq.CurrentIndex(), err)
 	}
@@ -134,6 +145,14 @@ func (s SchemeAny) Decode(seq *access.SeqGetAccess) (any, error) {
 		return nil, NewSchemeError(ErrUnexpectedEOF, SchemeAnyName, seq.CurrentIndex(), err)
 	}
 	return v, nil
+}
+
+func (s SchemeAny) Encode(put *access.PutAccess, val any) error {
+	err := put.AddAny(val, true)
+	if err != nil {
+		return NewSchemeError(ErrEncode, SchemeAnyName, -1, err)
+	}
+	return nil
 }
 
 type SchemeString struct{ Width int }
@@ -150,6 +169,18 @@ func (s SchemeString) Decode(seq *access.SeqGetAccess) (any, error) {
 	return string(payload), nil
 }
 
+func (s SchemeString) Encode(put *access.PutAccess, val any) error {
+	if s.IsNullable() && val == nil {
+		put.AddString("")
+	}
+	if value, ok := val.(string); ok {
+		put.AddString(value)
+	} else {
+		return NewSchemeError(ErrEncode, SchemeStringName, -1, ErrTypeMisMatch)
+	}
+	return nil
+}
+
 type SchemeBytes struct{ Width int }
 
 func (s SchemeBytes) Validate(seq *access.SeqGetAccess) error {
@@ -162,6 +193,18 @@ func (s SchemeBytes) Decode(seq *access.SeqGetAccess) (any, error) {
 		return nil, err
 	}
 	return payload, nil
+}
+
+func (s SchemeBytes) Encode(put *access.PutAccess, val any) error {
+	if s.IsNullable() && val == nil {
+		put.AddBytes(nil)
+	}
+	if value, ok := val.([]byte); ok {
+		put.AddBytes(value)
+	} else {
+		return NewSchemeError(ErrEncode, SchemeBytesName, -1, ErrTypeMisMatch)
+	}
+	return nil
 }
 
 // NOTE: SchemeMap expects keys in sorted order.
@@ -237,6 +280,43 @@ func (s SchemeMap) Decode(seq *access.SeqGetAccess) (any, error) {
 	return out, nil
 }
 
+func (s SchemeMap) Encode(put *access.PutAccess, val any) error {
+	if s.IsNullable() && val == nil && len(s.Schema) < 1 {
+		put.AddMapAny(nil, true)
+	}
+
+	if len(s.Schema)%2 != 0 {
+		return NewSchemeError(ErrConstraintViolated, SchemeMapName, -1,
+			fmt.Errorf("should contain key/value scheme pairs, count %d", len(s.Schema)))
+	}
+
+	if mapKV, ok := val.(map[string]any); ok {
+		keys := utils.SortKeys(mapKV)
+		if len(keys) != len(s.Schema)/2 {
+			return NewSchemeError(ErrInvalidFormat, SchemeMapName, -1, fmt.Errorf("mistmatch keys size %d != %d", len(keys), len(s.Schema)/2))
+		}
+		nested := put.BeginMap()
+		defer put.EndNested(nested)
+		j := 0
+		for i := 0; i < len(s.Schema); i += 2 {
+			k := keys[j]
+			err := s.Schema[i].Encode(nested, k)
+			if err != nil {
+				return NewSchemeError(ErrInvalidFormat, SchemeMapName, -1, err)
+			}
+			err = s.Schema[i+1].Encode(nested, mapKV[k])
+			if err != nil {
+				return NewSchemeError(ErrInvalidFormat, SchemeMapName, -1, err)
+			}
+			j++
+		}
+
+	} else {
+		return NewSchemeError(ErrEncode, SchemeMapName, -1, ErrTypeMisMatch)
+	}
+	return nil
+}
+
 type SchemeTypeOnly struct {
 	Tag types.Type
 }
@@ -265,6 +345,89 @@ func (s SchemeTypeOnly) Decode(seq *access.SeqGetAccess) (any, error) {
 	}
 }
 
+func (s SchemeTypeOnly) Encode(put *access.PutAccess, val any) error {
+	// Handle nulls
+	if val == nil {
+		switch s.Tag {
+		case types.TypeInteger:
+			put.AddNullableInt64(nil)
+		case types.TypeFloating:
+			put.AddNullableFloat64(nil)
+		case types.TypeString:
+			put.AddString("")
+		case types.TypeBool:
+			put.AddNullableBool(nil)
+		case types.TypeMap:
+			put.AddMap(nil)
+		case types.TypeTuple:
+			put.AddAnyTuple(nil, true)
+		default:
+			return NewSchemeError(ErrEncode, SchemeTypeOnlyName, -1, fmt.Errorf("unsupported type %v", s.Tag))
+		}
+		return nil
+	}
+
+	// Type assertions based on typ
+	switch s.Tag {
+	case types.TypeInteger:
+		switch v := val.(type) {
+		case int8:
+			put.AddInt8(v)
+		case int16:
+			put.AddInt16(v)
+		case int32:
+			put.AddInt32(v)
+		case int64:
+			put.AddInt64(v)
+		default:
+			return NewSchemeError(ErrEncode, SchemeTypeOnlyName, -1, ErrTypeMisMatch)
+		}
+
+	case types.TypeFloating:
+		switch v := val.(type) {
+		case float32:
+			put.AddFloat32(v)
+		case float64:
+			put.AddFloat64(v)
+		default:
+			return NewSchemeError(ErrEncode, SchemeTypeOnlyName, -1, ErrTypeMisMatch)
+		}
+
+	case types.TypeString:
+		if v, ok := val.(string); ok {
+			put.AddString(v)
+		} else {
+			return NewSchemeError(ErrEncode, SchemeTypeOnlyName, -1, ErrTypeMisMatch)
+		}
+
+	case types.TypeBool:
+		if v, ok := val.(bool); ok {
+			put.AddBool(v)
+		} else {
+			return NewSchemeError(ErrEncode, SchemeTypeOnlyName, -1, ErrTypeMisMatch)
+		}
+
+	case types.TypeMap:
+		if v, ok := val.(map[string]any); ok {
+			put.AddMapAny(v, true)
+		} else {
+			return NewSchemeError(ErrEncode, SchemeTypeOnlyName, -1, ErrTypeMisMatch)
+		}
+
+	case types.TypeTuple:
+		if v, ok := val.([]any); ok {
+			put.AddAnyTuple(v, true)
+		} else {
+			return NewSchemeError(ErrEncode, SchemeTypeOnlyName, -1, ErrTypeMisMatch)
+		}
+
+	default:
+		return NewSchemeError(ErrEncode, SchemeTypeOnlyName, -1, fmt.Errorf("unsupported type %v", s.Tag))
+	}
+
+	return nil
+}
+
 type Nullable interface {
 	IsNullable() bool
 }
@@ -289,6 +452,20 @@ func (s SchemeBool) Decode(seq *access.SeqGetAccess) (any, error) {
 		return nil, nil
 	}
 	return payload[0] != 0, nil
+}
+
+func (s SchemeBool) Encode(put *access.PutAccess, val any) error {
+	if s.Nullable && val == nil {
+		put.AddNullableBool(nil)
+		return nil
+	}
+	if value, ok := val.(bool); ok {
+		put.AddBool(value)
+	} else {
+		return NewSchemeError(ErrEncode, SchemeBoolName, -1, ErrTypeMisMatch)
+	}
+
+	return nil
 }
 
 func (s SchemeBool) IsNullable() bool { return s.Nullable }
@@ -394,6 +571,106 @@ func (s SchemeFloat64) Decode(seq *access.SeqGetAccess) (any, error) {
 	return math.Float64frombits(binary.LittleEndian.Uint64(payload)), nil
 }
 func (s SchemeFloat64) IsNullable() bool { return s.Nullable }
+func (s SchemeInt8) Encode(put *access.PutAccess, val any) error {
+	if s.Nullable && val == nil {
+		put.AddNullableInt8(nil)
+		return nil
+	}
+	switch v := val.(type) {
+	case int8:
+		put.AddInt8(v)
+	case int:
+		put.AddInt8(int8(v))
+	case float64:
+		put.AddInt8(int8(v))
+	default:
+		return NewSchemeError(ErrEncode, SchemeInt8Name, -1, ErrTypeMisMatch)
+	}
+	return nil
+}
+
+func (s SchemeInt16) Encode(put *access.PutAccess, val any) error {
+	if s.Nullable && val == nil {
+		put.AddNullableInt16(nil)
+		return nil
+	}
+	switch v := val.(type) {
+	case int16:
+		put.AddInt16(v)
+	case int:
+		put.AddInt16(int16(v))
+	case float64:
+		put.AddInt16(int16(v))
+	default:
+		return NewSchemeError(ErrEncode, SchemeInt16Name, -1, ErrTypeMisMatch)
+	}
+	return nil
+}
+
+func (s SchemeInt32) Encode(put *access.PutAccess, val any) error {
+	if s.Nullable && val == nil {
+		put.AddNullableInt32(nil)
+		return nil
+	}
+	switch v := val.(type) {
+	case int32:
+		put.AddInt32(v)
+	case int:
+		put.AddInt32(int32(v))
+	case float64:
+		put.AddInt32(int32(v))
+	default:
+		return NewSchemeError(ErrEncode, SchemeInt32Name, -1, ErrTypeMisMatch)
+	}
+	return nil
+}
+
+func (s SchemeInt64) Encode(put *access.PutAccess, val any) error {
+	if s.Nullable && val == nil {
+		put.AddNullableInt64(nil)
+		return nil
+	}
+	switch v := val.(type) {
+	case int64:
+		put.AddInt64(v)
+	case int:
+		put.AddInt64(int64(v))
+	case float64:
+		put.AddInt64(int64(v))
+	default:
+		return NewSchemeError(ErrEncode, SchemeInt64Name, -1, ErrTypeMisMatch)
+	}
+	return nil
+}
+
+func (s SchemeFloat32) Encode(put *access.PutAccess, val any) error {
+	if s.Nullable && val == nil {
+		put.AddNullableFloat32(nil)
+		return nil
+	}
+	switch v := val.(type) {
+	case float32:
+		put.AddFloat32(v)
+	case float64:
+		put.AddFloat32(float32(v))
+	default:
+		return NewSchemeError(ErrEncode, SchemeFloat32Name, -1, ErrTypeMisMatch)
+	}
+	return nil
+}
+
+func (s SchemeFloat64) Encode(put *access.PutAccess, val any) error {
+	if s.Nullable && val == nil {
+		put.AddNullableFloat64(nil)
+		return nil
+	}
+	if value, ok := val.(float64); ok {
+		put.AddFloat64(value)
+	} else {
+		return NewSchemeError(ErrEncode, SchemeFloat64Name, -1, ErrTypeMisMatch)
+	}
+	return nil
+}
 
 func SType(tag types.Type) Scheme {
 	return SchemeTypeOnly{Tag: tag}
@@ -445,7 +722,7 @@ func SVariableMap(nested ...Scheme) Scheme {
 func ValidateBuffer(buf []byte, chain SchemeChain) error {
 	seq, err := access.NewSeqGetAccess(buf)
 	if err != nil {
-		return NewSchemeError(ErrInvalidFormat, ChainName, 0, err)
+		return NewSchemeError(ErrInvalidFormat, ChainName, -1, err)
 	}
 	for _, scheme := range chain.Schemes {
 		if err := scheme.Validate(seq); err != nil {
@@ -458,7 +735,7 @@ func ValidateBuffer(buf []byte, chain SchemeChain) error {
 func DecodeBuffer(buf []byte, chain SchemeChain) (any, error) {
 	seq, err := access.NewSeqGetAccess(buf)
 	if err != nil {
-		return nil, NewSchemeError(ErrInvalidFormat, ChainName, 0, err)
+		return nil, NewSchemeError(ErrInvalidFormat, ChainName, -1, err)
 	}
 	out := make([]any, 0, len(chain.Schemes))
 	for _, scheme := range chain.Schemes {
@@ -474,6 +751,37 @@ func DecodeBuffer(buf []byte, chain SchemeChain) (any, error) {
 	return out, nil
 }
 
+func EncodeValue(val any, chain SchemeChain) ([]byte, error) {
+
+	c := len(chain.Schemes)
+	if c > 1 {
+		put := access.NewPutAccessFromPool()
+		defer access.ReleasePutAccess(put)
+		valArr, ok := val.([]any)
+		if !ok {
+			return nil, NewSchemeError(ErrEncode, ChainName, -1, ErrTypeMisMatch)
+		}
+		i := 0
+		for _, scheme := range chain.Schemes {
+			err := scheme.Encode(put, valArr[i])
+			if err != nil {
+				return nil, NewSchemeError(ErrEncode, ChainName, -1, err)
+			}
+			i++
+		}
+		return put.Pack(), nil
+	} else if c == 1 {
+		put := access.NewPutAccessFromPool()
+		defer access.ReleasePutAccess(put)
+		err := chain.Schemes[0].Encode(put, val)
+		if err != nil {
+			return nil, NewSchemeError(ErrEncode, ChainName, -1, err)
+		}
+		return put.Pack(), nil
+	}
+	return nil, nil
+}
+
 type SchemeNamedChain struct {
 	SchemeChain
 	FieldNames []string
@@ -482,10 +790,10 @@ type SchemeNamedChain struct {
 func DecodeBufferNamed(buf []byte, chain SchemeNamedChain) (any, error) {
 	seq, err := access.NewSeqGetAccess(buf)
 	if err != nil {
-		return nil, NewSchemeError(ErrInvalidFormat, SchemeNamedChainName, 0, err)
+		return nil, NewSchemeError(ErrInvalidFormat, SchemeNamedChainName, -1, err)
 	}
 	if len(chain.FieldNames) != len(chain.Schemes) {
-		return nil, NewSchemeError(ErrConstraintViolated, SchemeNamedChainName, 0,
+		return nil, NewSchemeError(ErrConstraintViolated, SchemeNamedChainName, -1,
 			fmt.Errorf("FieldNames count %d != Schemes count %d", len(chain.FieldNames), len(chain.Schemes)))
 	}
 	out := make(map[string]any, len(chain.Schemes))
@@ -497,6 +805,29 @@ func DecodeBufferNamed(buf []byte, chain SchemeNamedChain) (any, error) {
 		out[chain.FieldNames[i]] = val
 	}
 	return out, nil
+}
+
+func EncodeValueNamed(val any, chain SchemeNamedChain) ([]byte, error) {
+
+	put := access.NewPutAccessFromPool()
+	defer access.ReleasePutAccess(put)
+	mapKV, ok := val.(map[string]any)
+	if !ok {
+		return nil, NewSchemeError(ErrEncode, SchemeNamedChainName, -1, ErrTypeMisMatch)
+	}
+	for i, fn := range chain.FieldNames {
+		val, ok := mapKV[fn]
+		if ok {
+			err := chain.Schemes[i].Encode(put, val)
+			if err != nil {
+				return nil, NewSchemeError(ErrEncode, SchemeNamedChainName, -1, err)
+			}
+		} else {
+			return nil, NewSchemeError(ErrEncode, SchemeNamedChainName, -1, fmt.Errorf("missing key %s", fn))
+		}
+
+	}
+	return put.Pack(), nil
 }
 
 func precheck(errorName string, pos int, seq *access.SeqGetAccess, tag types.Type, hint int, nullable bool) (int, error) {
@@ -605,6 +936,20 @@ func (s SchemeString) CheckFunc(code ErrorCode, test func(payloadStr string) boo
 			}
 			return str, nil
 		},
+		EncodeFunc: func(put *access.PutAccess, val any) error {
+
+			if value, ok := val.(string); ok {
+				if test(value) {
+					put.AddString(value)
+				} else {
+					return NewSchemeError(ErrEncode, SchemeStringName, -1, StringErrorDetails{Actual: value})
+				}
+
+			} else {
+				return NewSchemeError(ErrEncode, SchemeStringName, -1, ErrTypeMisMatch)
+			}
+			return nil
+		},
 	}
 }
 
@@ -670,6 +1015,19 @@ func (s SchemeInt16) Range(min, max int16) Scheme {
 			}
 			return val, nil
 		},
+		EncodeFunc: func(put *access.PutAccess, val any) error {
+			if value, ok := val.(int16); ok {
+				if value < min || value > max {
+					return NewSchemeError(ErrEncode, SchemeInt16Name, -1, RangeErrorDetails{Min: int64(min), Max: int64(max), Actual: int64(value)})
+				} else {
+					put.AddInt16(value)
+				}
+
+			} else {
+				return NewSchemeError(ErrEncode, SchemeInt16Name, -1, ErrTypeMisMatch)
+			}
+			return nil
+		},
 	}
 }
 
@@ -706,6 +1064,19 @@ func (s SchemeInt32) Range(min, max int32) Scheme {
 			}
 			return val, nil
 		},
+		EncodeFunc: func(put *access.PutAccess, val any) error {
+			if value, ok := val.(int32); ok {
+				if value < min || value > max {
+					return NewSchemeError(ErrEncode, SchemeInt32Name, -1, RangeErrorDetails{Min: int64(min), Max: int64(max), Actual: int64(value)})
+				} else {
+					put.AddInt32(value)
+				}
+
+			} else {
+				return NewSchemeError(ErrEncode, SchemeInt32Name, -1, ErrTypeMisMatch)
+			}
+			return nil
+		},
 	}
 }
 
@@ -738,6 +1109,19 @@ func (s SchemeInt64) Range(min, max int64) Scheme {
 				)
 			}
 			return val, nil
+		},
+		EncodeFunc: func(put *access.PutAccess, val any) error {
+			if value, ok := val.(int64); ok {
+				if value < min || value > max {
+					return NewSchemeError(ErrEncode, SchemeInt64Name, -1, RangeErrorDetails{Min: int64(min), Max: int64(max), Actual: int64(value)})
+				} else {
+					put.AddInt64(value)
+				}
+
+			} else {
+				return NewSchemeError(ErrEncode, SchemeInt64Name, -1, ErrTypeMisMatch)
+			}
+			return nil
 		},
 	}
 }
@@ -780,6 +1164,18 @@ func (s SchemeInt64) DateRange(from, to time.Time) Scheme {
 				)
 			}
 			return val, nil
+		},
+		EncodeFunc: func(put *access.PutAccess, val any) error {
+			if value, ok := val.(int64); ok {
+				if value < min || value > max {
+					return NewSchemeError(ErrEncode, SchemeInt64Name, -1, RangeErrorDetails{Min: int64(min), Max: int64(max), Actual: int64(value)})
+				} else {
+					put.AddInt64(value)
+				}
+			} else {
+				return NewSchemeError(ErrEncode, SchemeInt64Name, -1, ErrTypeMisMatch)
+			}
+			return nil
 		},
 	}
 }
@@ -851,6 +1247,7 @@ func (s SchemeMapUnordered) Validate(seq *access.SeqGetAccess) error {
 	}
 	return nil
 }
+
 func (s SchemeMapUnordered) Decode(seq *access.SeqGetAccess) (any, error) {
 	pos := seq.CurrentIndex()
 	typ, _, err := seq.PeekTypeWidth()
@@ -909,6 +1306,32 @@ func (s SchemeMapUnordered) Decode(seq *access.SeqGetAccess) (any, error) {
 		return nil, NewSchemeError(ErrUnexpectedEOF, SchemeMapUnorderedName, pos, err)
 	}
 	return out, nil
+}
+
+func (s SchemeMapUnordered) Encode(put *access.PutAccess, val any) error {
+
+	if mapKV, ok := val.(map[string]any); ok {
+
+		nested := put.BeginMap()
+		defer put.EndNested(nested)
+		ss := SString
+		for key, sch := range s.Fields {
+			if val, exist := mapKV[key]; exist {
+				ss.Encode(nested, key)
+				err := sch.Encode(nested, val)
+				if err != nil {
+					return NewSchemeError(ErrInvalidFormat, SchemeMapUnorderedName, -1, err)
+				}
+			} else {
+				return NewSchemeError(ErrInvalidFormat, SchemeMapUnorderedName, -1, fmt.Errorf("missing key %s", key))
+			}
+
+		}
+
+	} else {
+		return NewSchemeError(ErrEncode, SchemeMapUnorderedName, -1, ErrTypeMisMatch)
+	}
+	return nil
 }
 
 type TupleScheme struct {
@@ -1000,6 +1423,53 @@ func (s TupleScheme) Decode(seq *access.SeqGetAccess) (any, error) {
 		return nil, NewSchemeError(ErrUnexpectedEOF, TupleSchemeName, pos, err)
 	}
 	return out, nil
+}
+
+func (s TupleScheme) Encode(put *access.PutAccess, val any) error {
+
+	if valArr, ok := val.([]any); ok {
+
+		nested := put.BeginTuple()
+		defer put.EndNested(nested)
+		j := 0
+		lastI := len(s.Schema) - 1
+		for k, sch := range s.Schema {
+
+			if schRet, ok := sch.(SRepeatScheme); ok {
+				var err error
+				if s.Flatten {
+					if lastI != k {
+						if schRet.max < 1 {
+							return NewSchemeError(ErrInvalidFormat, TupleSchemeName, -1, fmt.Errorf("max should be provided if repeat is not in the end. max: %d", schRet.max))
+						}
+						err = schRet.Encode(nested, valArr[j:j+schRet.max])
+						j = j + schRet.max
+					} else {
+						err = schRet.Encode(nested, valArr[j:])
+					}
+
+				} else {
+					err = schRet.Encode(nested, valArr[j])
+				}
+
+				if err != nil {
+					return NewSchemeError(ErrInvalidFormat, TupleSchemeName, -1, err)
+				}
+
+			} else {
+				err := sch.Encode(nested, valArr[j])
+				if err != nil {
+					return NewSchemeError(ErrInvalidFormat, TupleSchemeName, -1, err)
+				}
+				j++
+			}
+
+		}
+
+	} else {
+		return NewSchemeError(ErrEncode, TupleSchemeName, -1, ErrTypeMisMatch)
+	}
+	return nil
 }
 
 type TupleSchemeNamed struct {
@@ -1121,6 +1591,74 @@ func (s TupleSchemeNamed) Decode(seq *access.SeqGetAccess) (any, error) {
 	return out, nil
 }
 
+func (s TupleSchemeNamed) Encode(put *access.PutAccess, val any) error {
+
+	if mapKV, ok := val.(map[string]any); ok {
+
+		nested := put.BeginTuple()
+		defer put.EndNested(nested)
+		for i, key := range s.FieldNames {
+			if sch, ok := s.Schema[i].(SRepeatScheme); ok {
+
+				minx := sch.min
+				max := sch.max
+				j := 0
+				schi := 0
+				for ; j < minx; j++ {
+					keyx := fmt.Sprintf("%s_%d", key, j)
+					if val, exist := mapKV[keyx]; exist {
+						err := sch.Schema[schi].Encode(nested, val)
+						if err != nil {
+							return NewSchemeError(ErrInvalidFormat, TupleSchemeNamedName, -1, err)
+						}
+					} else {
+						return NewSchemeError(ErrInvalidFormat, TupleSchemeNamedName, -1, fmt.Errorf("missing key %s", keyx))
+					}
+					schi++
+					if schi >= len(sch.Schema) {
+						schi = 0
+					}
+				}
+				if max == -1 || max > minx {
+
+					for {
+						keyx := fmt.Sprintf("%s_%d", key, j)
+						if val, exist := mapKV[keyx]; exist {
+							err := sch.Schema[schi].Encode(nested, val)
+							if err != nil {
+								return NewSchemeError(ErrInvalidFormat, TupleSchemeNamedName, -1, err)
+							}
+							schi++
+							if schi >= len(sch.Schema) {
+								schi = 0
+							}
+						} else {
+							break
+						}
+
+						j++
+					}
+
+				}
+			} else {
+				if val, exist := mapKV[key]; exist {
+					err := s.Schema[i].Encode(nested, val)
+					if err != nil {
+						return NewSchemeError(ErrInvalidFormat, TupleSchemeNamedName, -1, err)
+					}
+				} else {
+					return NewSchemeError(ErrInvalidFormat, TupleSchemeNamedName, -1, fmt.Errorf("missing key %s", key))
+				}
+			}
+
+		}
+
+	} else {
+		return NewSchemeError(ErrEncode, TupleSchemeNamedName, -1, ErrTypeMisMatch)
+	}
+	return nil
+}
+
 type SRepeatScheme struct {
 	Schema []Scheme
 	max    int
@@ -1134,7 +1672,7 @@ func SRepeat(minimum int, maximum int, schema ...Scheme) SRepeatScheme {
 	if maximum < 0 {
 		maximum = -1
 	}
-	return SRepeatScheme{Schema: schema, min: minimum, max: maximum}
+	return SRepeatScheme{Schema: schema, min: minimum * len(schema), max: maximum * len(schema)}
 }
 
 func (s SRepeatScheme) IsNullable() bool {
@@ -1202,4 +1740,36 @@ outer:
 		}
 	}
 	return out, nil
+}
+
+func (s SRepeatScheme) Encode(put *access.PutAccess, val any) error {
+
+	valArr, ok := val.([]any)
+	if !ok {
+		return NewSchemeError(ErrEncode, SRepeatSchemeName, -1, ErrTypeMisMatch)
+	}
+	argCount := len(valArr)
+	if s.min != -1 && argCount < s.min {
+		return NewSchemeError(ErrConstraintViolated, SRepeatSchemeName, -1,
+			fmt.Errorf("expected minimum %d elements, but only %d remain", s.min, argCount))
+	}
+	maxIter := argCount
+	if s.max != -1 && s.max < argCount {
+		maxIter = s.max
+	}
+	i := 0
+outer:
+	for {
+		for _, scheme := range s.Schema {
+			if i >= maxIter {
+				break outer
+			}
+			err := scheme.Encode(put, valArr[i])
+			if err != nil {
+				return NewSchemeError(ErrEncode, SRepeatSchemeName, -1, err)
+			}
+			i++
+		}
+	}
+	return nil
 }

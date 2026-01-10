@@ -535,6 +535,10 @@ func packAnyValueSortedMap(p *PutAccess, v any, useNumeric bool) error {
 	return err
 }
 
+func (p *PutAccess) AddAny(m any, useNumeric bool) error {
+	return packAnyValue(p, m, useNumeric)
+}
+
 func (p *PutAccess) AddMapAny(m map[string]any, useNumeric bool) error {
 	p.offsets = binary.LittleEndian.AppendUint16(
 		p.offsets,
@@ -650,4 +654,21 @@ func (p *PutAccess) PackBuff(buffer []byte) (int, error) {
 
 func (p *PutAccess) AddPackable(v Packable) {
 	v.PackInto(p)
+}
+
+func (p *PutAccess) BeginMap() *PutAccess {
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, types.EncodeHeader(p.position, types.TypeMap))
+	return NewPutAccessFromPool()
+}
+
+func (p *PutAccess) BeginTuple() *PutAccess {
+	p.offsets = binary.LittleEndian.AppendUint16(
+		p.offsets,
+		types.EncodeHeader(p.position, types.TypeTuple),
+	)
+	return NewPutAccessFromPool()
+}
+
+func (p *PutAccess) EndNested(nested *PutAccess) {
+	p.appendAndReleaseNested(nested)
 }
