@@ -168,3 +168,19 @@ func (v PackByteArrayRef) PackInto(p *access.PutAccess) {
 func PackByteArray(b []byte) PackByteArrayRef {
 	return PackByteArrayRef{ref: &b}
 }
+
+// PackFlags packs a variadic list of bools into a bit-packed byte array
+func PackFlags(flags ...bool) PackByteArrayRef {
+	byteCount := (len(flags) + 7) / 8
+	buf := make([]byte, byteCount)
+
+	for i, f := range flags {
+		if f {
+			byteIndex := i / 8
+			bitIndex := uint(i % 8)
+			buf[byteIndex] |= 1 << bitIndex
+		}
+	}
+
+	return PackByteArrayRef{ref: &buf}
+}

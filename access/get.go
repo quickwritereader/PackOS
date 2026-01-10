@@ -419,6 +419,34 @@ func (g *GetAccess) GetMapAny(pos int) (map[string]any, error) {
 	return out, nil
 }
 
+// GetMapOrderedAny decodes a map at the given position into an OrderedMapAny,
+// preserving insertion order of keys.
+func (g *GetAccess) GetMapOrderedAny(pos int) (*types.OrderedMapAny, error) {
+	tp, start, end := g.rangeAt(pos)
+	if end < start || tp != types.TypeMap {
+		return nil, errors.New("decode error")
+	}
+	if end == start {
+		return nil, nil // nil map
+	}
+
+	nested := NewGetAccess(g.buf[start:end])
+	out := types.NewOrderedMapAny()
+
+	for i := 0; i < nested.argCount; i += 2 {
+		key, err := nested.GetString(i)
+		if err != nil {
+			return nil, fmt.Errorf("ordered map key decode error at %d: %w", i, err)
+		}
+		val, err := GetAny(nested, i+1)
+		if err != nil {
+			return nil, fmt.Errorf("ordered map value decode error at %d: %w", i+1, err)
+		}
+		out.Set(key, val)
+	}
+	return out, nil
+}
+
 func (g *GetAccess) GetMapStr(pos int) (map[string]string, error) {
 	tp, start, end := g.rangeAt(pos)
 	if end < start || tp != types.TypeMap {
