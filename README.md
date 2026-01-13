@@ -414,3 +414,13 @@ STuple(
 )
 
 ```
+
+## Sponsorship
+
+
+If you find **PackOS** useful and would like to support its development, you can donate via **Litecoin (LTC)**. 
+
+**LTC Address:** `ltc1qqx8e6yl95gxlwqv52mwdt9f76euvls5fvt4ckd`
+<img width="340" height="340" alt="lite coin" src="https://github.com/user-attachments/assets/94d720a0-e886-42f5-bf42-36b27327626a" />
+> [!IMPORTANT]
+> Please ensure you are sending via the **Litecoin (LTC) network** only.
