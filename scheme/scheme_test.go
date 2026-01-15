@@ -1176,3 +1176,57 @@ func TestEncodePackedTuplesNamed(t *testing.T) {
 	assert.Equal(t, expected, actual,
 		"Encoder should produce packed tuples matching expected buffer")
 }
+
+func TestSchemeMultiCheckNamesScheme(t *testing.T) {
+	// Suppose we have three checkboxes: "read", "write", "execute"
+	fieldNames := []string{"read", "write", "execute"}
+	chain := SChain(
+		SMultiCheckNames(fieldNames),
+	)
+
+	// Pack a tuple of bools: read=true, write=false, execute=true
+	actual := pack.Pack(
+		pack.PackTuple(
+			pack.PackBool(true),
+			pack.PackBool(false),
+			pack.PackBool(true),
+		),
+	)
+
+	// Validate
+	err := ValidateBuffer(actual, chain)
+	assert.NoError(t, err, "Validation should succeed for packed structure")
+
+	// Decode
+	ret, err := DecodeBuffer(actual, chain)
+	assert.NoError(t, err, "Decoding should succeed for packed structure")
+
+	// Expected slice of selected names
+	expected := []string{"read", "execute"}
+
+	// Assert type and values
+	selected, ok := ret.([]string)
+	assert.True(t, ok, "decoded value should be []string")
+	assert.ElementsMatch(t, expected, selected, "selected names should match expected")
+}
+
+func TestSchemeMultiCheckNamesScheme_Encode(t *testing.T) {
+	fieldNames := []string{"read", "write", "execute"}
+	chain := SChain(
+		SMultiCheckNames(fieldNames),
+	)
+
+	// Encode []string{"write"} → should produce tuple [false,true,false]
+	val := []string{"write"}
+	encoded, err := EncodeValue(val, chain)
+	assert.NoError(t, err, "Encoding should succeed")
+
+	// Decode back
+	decoded, err := DecodeBuffer(encoded, chain)
+	assert.NoError(t, err, "Decoding should succeed")
+
+	expected := []string{"write"}
+	selected, ok := decoded.([]string)
+	assert.True(t, ok, "decoded value should be []string")
+	assert.ElementsMatch(t, expected, selected, "round-trip should preserve selected names")
+}

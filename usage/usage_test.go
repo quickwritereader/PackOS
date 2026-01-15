@@ -7,9 +7,11 @@ import (
 	"testing"
 
 	"github.com/quickwritereader/PackOS/access"
+	"github.com/quickwritereader/PackOS/scheme"
 	. "github.com/quickwritereader/PackOS/scheme"
 	"github.com/quickwritereader/PackOS/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const testJson = `{"meta":{"version":"1.0.0","author":"Copilot","timestamp":"2025-12-15T11:21:00Z","description":"Large JSON for testing decode and pack length comparison"},"users":[{"id":1,"name":"Alice","roles":["admin","editor","viewer"],"settings":{"theme":"dark","notifications":true,"languages":["en","fr","de","es"]},"activity":[{"date":"2025-01-01","action":"login","ip":"192.168.0.1"},{"date":"2025-01-02","action":"upload","file":"report.pdf"},{"date":"2025-01-03","action":"logout"}]},{"id":2,"name":"Bob","roles":["viewer"],"settings":{"theme":"light","notifications":false,"languages":["en","ru"]},"activity":[{"date":"2025-02-10","action":"login","ip":"10.0.0.2"},{"date":"2025-02-11","action":"download","file":"data.csv"}]}],"projects":[{"projectId":"P100","title":"AI Research","status":"active","members":[1,2],"tasks":[{"taskId":"T1","title":"Data Collection","completed":false},{"taskId":"T2","title":"Model Training","completed":true},{"taskId":"T3","title":"Evaluation","completed":false}]},{"projectId":"P200","title":"Web Development","status":"archived","members":[2],"tasks":[{"taskId":"T10","title":"Frontend Design","completed":true},{"taskId":"T11","title":"Backend API","completed":true},{"taskId":"T12","title":"Deployment","completed":true}]}],"logs":{"system":[{"level":"info","message":"System started","time":"2025-01-01T00:00:00Z"},{"level":"warn","message":"High memory usage","time":"2025-01-05T12:00:00Z"},{"level":"error","message":"Disk failure","time":"2025-01-10T18:30:00Z"}],"application":[{"level":"debug","message":"User clicked button","time":"2025-02-01T09:15:00Z"},{"level":"info","message":"File uploaded","time":"2025-02-02T10:00:00Z"}]},"data":{"matrix":[[1,2,3,4,5],[6,7,8,9,10],[11,12,13,14,15],[16,17,18,19,20]],"nested":{"alpha":{"beta":{"gamma":{"delta":"deep value","epsilon":[true,false,null,"string",12345]}}}},"largeArray":[{"index":0,"value":"A"},{"index":1,"value":"B"},{"index":2,"value":"C"},{"index":3,"value":"D"},{"index":4,"value":"E"},{"index":5,"value":"F"},{"index":6,"value":"G"},{"index":7,"value":"H"},{"index":8,"value":"I"},{"index":9,"value":"J"},{"index":10,"value":"K"},{"index":11,"value":"L"},{"index":12,"value":"M"},{"index":13,"value":"N"},{"index":14,"value":"O"},{"index":15,"value":"P"},{"index":16,"value":"Q"},{"index":17,"value":"R"},{"index":18,"value":"S"},{"index":19,"value":"T"},{"index":20,"value":"U"},{"index":21,"value":"V"},{"index":22,"value":"W"},{"index":23,"value":"X"},{"index":24,"value":"Y"},{"index":25,"value":"Z"}]}}`
@@ -225,4 +227,143 @@ func TestUsage1_WithSChainMax(t *testing.T) {
 
 	assert.Equal(t, origStr, backStr,
 		"Re‑encoded decodedBack should match the original JSON stringwise")
+}
+
+func TestDefaultHugoConfigRoundTrip(t *testing.T) {
+
+	SchemeJsonStr := `
+{"type":"tuple","variableLength":true,"fieldNames":["baseURL","languageCode","title","theme",
+"paginate","permalinks","outputs","menus"],"schema":[{"type":"string","pattern":"^(https?://.*|/)$"},
+{"type":"string"},{"type":"string"},{"type":"string"},{"type":"int32","min":1},{"type":"tuple",
+"fieldNames":["blog"],"schema":[{"type":"string","pattern":"^/blog/"}]},{"type":"tuple",
+"fieldNames":["home"],"schema":[{"type":"tuple","variableLength":true,"flatten":true,"schema":[
+{"type":"repeat","min":0,"max":8,"schema":[{"type":"string","pattern":"^(HTML|RSS|JSON|AMP)$"}]}]}]},
+{"type":"tuple","fieldNames":["main"],"flatten":false,"variableLength":true,"schema":[{"type":"repeat",
+"min":1,"max":1024,"schema":[{"type":"tuple","fieldNames":["identifier","name","url","weight"],
+"schema":[{"type":"string"},{"type":"string"},{"type":"string"},{"type":"int32","min":1}]}]}]}]}
+	`
+	// A minimal but valid Hugo config JSON
+	configJSON := `{
+		"baseURL": "/",
+		"languageCode": "en-us",
+		"title": "My Hugo Site",
+		"theme": "ananke",
+		"paginate": 10,
+		"permalinks": {
+			"blog": "/blog/:slug/"
+		},
+		"outputs": {
+			"home": ["HTML","RSS","JSON"]
+		},
+		"menus": {
+			"main": [
+				{"identifier":"home","name":"Home","url":"/","weight":1},
+				{"identifier":"blog","name":"Blog","url":"/blog/","weight":2}
+			]
+		}
+	}`
+
+	var SchemeJson SchemeJSON
+	require.NoError(t, json.Unmarshal([]byte(SchemeJsonStr), &SchemeJson), "failed to unmarshal config")
+
+	schain := scheme.SChain(scheme.BuildScheme(SchemeJson))
+
+	// Decode into generic map
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal([]byte(configJSON), &decoded), "failed to unmarshal config")
+
+	// Encode using your scheme
+	encoded, err := scheme.EncodeValue(decoded, schain)
+	require.NoError(t, err, "scheme encode failed")
+
+	// Decode back using your scheme
+	roundTrip, err := scheme.DecodeBuffer(encoded, schain)
+	require.NoError(t, err, "scheme decode failed")
+
+	// Marshal both original and round-trip to canonical JSON
+	origJSON, err := json.Marshal(decoded)
+	require.NoError(t, err, "failed to marshal original")
+
+	roundTripJSON, err := json.Marshal(roundTrip)
+	require.NoError(t, err, "failed to marshal roundTrip")
+
+	// Compare the JSON strings
+	assert.JSONEq(t, string(origJSON), string(roundTripJSON), "round-trip mismatch")
+
+}
+
+func TestDefaultHugoConfigRoundTripMultiCheck(t *testing.T) {
+
+	SchemeJsonStr := `
+	{"type":"tuple","variableLength":true,"fieldNames":["baseURL","languageCode","title","theme",
+	"paginate","permalinks","outputs","menus"],"schema":[{"type":"string","pattern":"^(https?://.*|/)$"},
+	{"type":"string"},{"type":"string"},{"type":"string"},{"type":"int32","min":1},{"type":"tuple",
+	"fieldNames":["blog"],"schema":[{"type":"string","pattern":"^/blog/"}]},
+	{
+	"type": "tuple",
+	"fieldNames": ["home", "section", "page", "taxonomy", "term"],
+	"schema": [
+		{ "type": "multicheck", "fieldNames": ["HTML", "RSS", "JSON", "AMP"] },
+		{ "type": "multicheck", "fieldNames": ["HTML", "RSS", "JSON", "AMP"] },
+		{ "type": "multicheck", "fieldNames": ["HTML", "RSS", "JSON", "AMP"] },
+		{ "type": "multicheck", "fieldNames": ["HTML", "RSS", "JSON", "AMP"] },
+		{ "type": "multicheck", "fieldNames": ["HTML", "RSS", "JSON", "AMP"] }
+	]
+	},
+	{"type":"tuple","fieldNames":["main"],"flatten":false,"variableLength":true,"schema":[{"type":"repeat",
+	"min":1,"max":1024,"schema":[{"type":"tuple","fieldNames":["identifier","name","url","weight"],
+	"schema":[{"type":"string"},{"type":"string"},{"type":"string"},{"type":"int32","min":1}]}]}]}]}
+	`
+	// A minimal but valid Hugo config JSON
+	configJSON := `{
+		"baseURL": "/",
+		"languageCode": "en-us",
+		"title": "My Hugo Site",
+		"theme": "ananke",
+		"paginate": 10,
+		"permalinks": {
+			"blog": "/blog/:slug/"
+		},
+		"outputs": {
+			"home": ["HTML", "RSS", "JSON", "AMP"],
+			"section": ["HTML", "RSS", "JSON"],
+			"page": ["HTML",  "JSON","AMP"],
+			"taxonomy": ["HTML", "RSS"],
+			"term": ["HTML", "RSS", "JSON"]
+		}, 
+		"menus": {
+			"main": [
+				{"identifier":"home","name":"Home","url":"/","weight":1},
+				{"identifier":"blog","name":"Blog","url":"/blog/","weight":2}
+			]
+		}
+	}`
+
+	var SchemeJson SchemeJSON
+	require.NoError(t, json.Unmarshal([]byte(SchemeJsonStr), &SchemeJson), "failed to unmarshal config")
+
+	schain := scheme.SChain(scheme.BuildScheme(SchemeJson))
+
+	// Decode into generic map
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal([]byte(configJSON), &decoded), "failed to unmarshal config")
+
+	// Encode using your scheme
+	encoded, err := scheme.EncodeValue(decoded, schain)
+	require.NoError(t, err, "scheme encode failed")
+
+	// Decode back using your scheme
+	roundTrip, err := scheme.DecodeBuffer(encoded, schain)
+	require.NoError(t, err, "scheme decode failed")
+
+	// Marshal both original and round-trip to canonical JSON
+	origJSON, err := json.Marshal(decoded)
+	require.NoError(t, err, "failed to marshal original")
+
+	roundTripJSON, err := json.Marshal(roundTrip)
+	require.NoError(t, err, "failed to marshal roundTrip")
+
+	// Compare the JSON strings
+	assert.JSONEq(t, string(origJSON), string(roundTripJSON), "round-trip mismatch")
+
 }

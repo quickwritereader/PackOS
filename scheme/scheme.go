@@ -141,21 +141,22 @@ type Scheme interface {
 }
 
 const (
-	SchemeAnyName          = "SchemeAny"
-	SchemeStringName       = "SchemeString"
-	SchemeBytesName        = "SchemeBytes"
-	SchemeMapName          = "SchemeMap"
-	SchemeTypeOnlyName     = "SchemeTypeOnly"
-	SchemeBoolName         = "SchemeBool"
-	SchemeInt8Name         = "SchemeInt8"
-	SchemeInt16Name        = "SchemeInt16"
-	SchemeInt32Name        = "SchemeInt32"
-	SchemeInt64Name        = "SchemeInt64"
-	SchemeFloat32Name      = "SchemeFloat32"
-	SchemeFloat64Name      = "SchemeFloat64"
-	SchemeNamedChainName   = "SchemeNamedChain"
-	SchemeMapUnorderedName = "SchemeMapUnordered"
-	ChainName              = "SchemeChain"
+	SchemeAnyName                    = "SchemeAny"
+	SchemeStringName                 = "SchemeString"
+	SchemeBytesName                  = "SchemeBytes"
+	SchemeMapName                    = "SchemeMap"
+	SchemeTypeOnlyName               = "SchemeTypeOnly"
+	SchemeBoolName                   = "SchemeBool"
+	SchemeInt8Name                   = "SchemeInt8"
+	SchemeInt16Name                  = "SchemeInt16"
+	SchemeInt32Name                  = "SchemeInt32"
+	SchemeInt64Name                  = "SchemeInt64"
+	SchemeFloat32Name                = "SchemeFloat32"
+	SchemeFloat64Name                = "SchemeFloat64"
+	SchemeNamedChainName             = "SchemeNamedChain"
+	SchemeMapUnorderedName           = "SchemeMapUnordered"
+	SchemeMultiCheckNamesSchemeNamed = "SchemeMultiCheckNamesSchemeNamed"
+	ChainName                        = "SchemeChain"
 
 	TupleSchemeName      = "TupleScheme"
 	TupleSchemeNamedName = "TupleSchemeNamed"
@@ -1557,18 +1558,12 @@ type TupleSchemeNamed struct {
 }
 
 func STupleNamed(fieldNames []string, schema ...Scheme) TupleSchemeNamed {
-	if len(fieldNames) != len(schema) {
-		panic("STupleNamed: fieldNames and schema length mismatch")
-	}
 
 	return TupleSchemeNamed{FieldNames: fieldNames, Schema: schema, Nullable: true}
 }
 
 // Strict named tuple: exact field count
 func STupleNamedVal(fieldNames []string, schema ...Scheme) TupleSchemeNamed {
-	if len(fieldNames) != len(schema) {
-		panic("STupleNamedVal: fieldNames and schema length mismatch")
-	}
 	return TupleSchemeNamed{
 		FieldNames:     fieldNames,
 		Schema:         schema,
@@ -1580,9 +1575,6 @@ func STupleNamedVal(fieldNames []string, schema ...Scheme) TupleSchemeNamed {
 
 // Flexible named tuple: allows repeats/extra fields
 func STupleNamedValFlattened(fieldNames []string, schema ...Scheme) TupleSchemeNamed {
-	if len(fieldNames) != len(schema) {
-		panic("STupleNamedValFlattened: fieldNames and schema length mismatch")
-	}
 	return TupleSchemeNamed{
 		FieldNames:     fieldNames,
 		Schema:         schema,
@@ -1597,6 +1589,9 @@ func (s TupleSchemeNamed) IsNullable() bool {
 }
 
 func (s TupleSchemeNamed) Validate(seq *access.SeqGetAccess) error {
+	if len(s.FieldNames) != len(s.Schema) {
+		return NewSchemeError(ErrConstraintViolated, TupleSchemeNamedName, "", 0, SizeExact{Actual: len(s.FieldNames), Exact: len(s.Schema)})
+	}
 	pos := seq.CurrentIndex()
 	_, err := precheck(TupleSchemeNamedName, pos, seq, types.TypeTuple, -1, s.IsNullable())
 	if err != nil {
@@ -1624,6 +1619,9 @@ func (s TupleSchemeNamed) Validate(seq *access.SeqGetAccess) error {
 }
 
 func (s TupleSchemeNamed) Decode(seq *access.SeqGetAccess) (any, error) {
+	if len(s.FieldNames) != len(s.Schema) {
+		return nil, NewSchemeError(ErrConstraintViolated, TupleSchemeNamedName, "", 0, SizeExact{Actual: len(s.FieldNames), Exact: len(s.Schema)})
+	}
 	pos := seq.CurrentIndex()
 	_, err := precheck(TupleSchemeNamedName, pos, seq, types.TypeTuple, -1, s.IsNullable())
 	if err != nil {
@@ -1665,13 +1663,15 @@ func (s TupleSchemeNamed) Decode(seq *access.SeqGetAccess) (any, error) {
 }
 
 func (s TupleSchemeNamed) Encode(put *access.PutAccess, val any) error {
-
+	if len(s.FieldNames) != len(s.Schema) {
+		return NewSchemeError(ErrConstraintViolated, TupleSchemeNamedName, "", 0, SizeExact{Actual: len(s.FieldNames), Exact: len(s.Schema)})
+	}
 	if mapKV, ok := val.(map[string]any); ok {
 
 		nested := put.BeginTuple()
 		defer put.EndNested(nested)
 		for i, key := range s.FieldNames {
-			if sch, ok := s.Schema[i].(SRepeatScheme); ok {
+			if sch, ok := s.Schema[i].(SRepeatScheme); ok && s.Flatten {
 
 				minx := sch.min
 				max := sch.max
@@ -1842,6 +1842,118 @@ outer:
 				return NewSchemeError(ErrEncode, SRepeatSchemeName, "", i, err)
 			}
 			i++
+		}
+	}
+	return nil
+}
+
+// SchemeMultiCheckNamesScheme is a convenience scheme: every field is a SchemeBool.
+type SchemeMultiCheckNamesScheme struct {
+	FieldNames []string
+	Nullable   bool
+}
+
+func SMultiCheckNames(fieldNames []string) SchemeMultiCheckNamesScheme {
+	return SchemeMultiCheckNamesScheme{
+		FieldNames: fieldNames,
+		Nullable:   true,
+	}
+}
+
+func (s SchemeMultiCheckNamesScheme) IsNullable() bool {
+	return s.Nullable
+}
+
+func (s SchemeMultiCheckNamesScheme) Validate(seq *access.SeqGetAccess) error {
+	pos := seq.CurrentIndex()
+	_, err := precheck(SchemeMultiCheckNamesSchemeNamed, pos, seq, types.TypeTuple, -1, s.IsNullable())
+	if err != nil {
+		return err
+	}
+	sub, err := seq.PeekNestedSeq()
+	if err != nil {
+		return NewSchemeError(ErrInvalidFormat, SchemeMultiCheckNamesSchemeNamed, "", pos, err)
+	}
+	if sub.ArgCount() != len(s.FieldNames) {
+		return NewSchemeError(ErrConstraintViolated, SchemeMultiCheckNamesSchemeNamed, "", pos,
+			SizeExact{Actual: sub.ArgCount(), Exact: len(s.FieldNames)})
+	}
+	for range s.FieldNames {
+		err := SchemeBool{}.Validate(sub)
+		if err != nil {
+			return NewSchemeError(ErrInvalidFormat, SchemeMultiCheckNamesSchemeNamed, "", pos, err)
+		}
+	}
+	if err := seq.Advance(); err != nil {
+		return NewSchemeError(ErrUnexpectedEOF, SchemeMultiCheckNamesSchemeNamed, "", pos, err)
+	}
+	return nil
+}
+
+func (s SchemeMultiCheckNamesScheme) Decode(seq *access.SeqGetAccess) (any, error) {
+	pos := seq.CurrentIndex()
+	_, err := precheck(SchemeMultiCheckNamesSchemeNamed, pos, seq, types.TypeTuple, -1, s.IsNullable())
+	if err != nil {
+		return nil, err
+	}
+
+	selected := make([]string, 0)
+
+	sub, err := seq.PeekNestedSeq()
+	if err != nil {
+		return nil, NewSchemeError(ErrInvalidFormat, SchemeMultiCheckNamesSchemeNamed, "", pos, err)
+	}
+	if sub.ArgCount() != len(s.FieldNames) {
+		return nil, NewSchemeError(ErrConstraintViolated, SchemeMultiCheckNamesSchemeNamed, "", pos,
+			SizeExact{Actual: sub.ArgCount(), Exact: len(s.FieldNames)})
+	}
+
+	for _, name := range s.FieldNames {
+		v, err := SchemeBool{}.Decode(sub)
+		if err != nil {
+			return nil, NewSchemeError(ErrInvalidFormat, SchemeMultiCheckNamesSchemeNamed, name, pos, err)
+		}
+		if b, ok := v.(bool); ok && b {
+			selected = append(selected, name)
+		}
+	}
+
+	if err := seq.Advance(); err != nil {
+		return nil, NewSchemeError(ErrUnexpectedEOF, SchemeMultiCheckNamesSchemeNamed, "", pos, err)
+	}
+
+	// Return only the slice of selected names
+	return selected, nil
+}
+
+func (s SchemeMultiCheckNamesScheme) Encode(put *access.PutAccess, val any) error {
+
+	set := make(map[string]struct{}, len(s.FieldNames))
+	switch v := val.(type) {
+	case []string:
+		for _, name := range v {
+			set[name] = struct{}{}
+		}
+	case []interface{}:
+		for _, elem := range v {
+			str, ok := elem.(string)
+			if !ok {
+				return NewSchemeError(ErrEncode, SchemeMultiCheckNamesSchemeNamed, "", -1, ErrTypeMisMatch)
+			}
+			set[str] = struct{}{}
+		}
+	default:
+		return NewSchemeError(ErrEncode, SchemeMultiCheckNamesSchemeNamed, "", -1, ErrTypeMisMatch)
+	}
+
+	nested := put.BeginTuple()
+	defer put.EndNested(nested)
+
+	for _, key := range s.FieldNames {
+		_, checked := set[key]
+		err := SchemeBool{}.Encode(nested, checked)
+		if err != nil {
+			return NewSchemeError(ErrInvalidFormat, SchemeMultiCheckNamesSchemeNamed, key, -1, err)
 		}
 	}
 	return nil

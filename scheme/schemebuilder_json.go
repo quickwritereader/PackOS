@@ -143,7 +143,12 @@ func BuildScheme(js SchemeJSON) Scheme {
 			return SMapUnorderedOptional(mapped)
 		}
 		return SMapUnordered(mapped)
+	case "multicheck":
+		if len(js.FieldNames) > 0 {
 
+			return SMultiCheckNames(js.FieldNames)
+		}
+		return SMultiCheckNames([]string{})
 	default:
 		panic("unknown scheme type: " + js.Type)
 	}
