@@ -283,6 +283,52 @@ func TestDecodePackedStructure(t *testing.T) {
 
 }
 
+func TestDecodePackedMapUnOrderedOptional(t *testing.T) {
+	actual := pack.Pack(
+		pack.PackMapSorted{
+			"meta": pack.PackMapSorted{
+				"role": pack.PackString("admin"),
+			},
+			"name": pack.PackString("gopher"),
+		},
+	)
+
+	chain := SChain(
+		SMap(
+			SString.Match("meta"), // key
+			SMapUnorderedOptional(map[string]Scheme{
+				"user": SBytes(len("alice")),
+				"role": SString.Pattern(`^(admin|guest)$`),
+			}),
+			SString.Match("name"),     // key
+			SStringLen(len("gopher")), // value
+		),
+	)
+
+	err2 := ValidateBuffer(actual, chain)
+	assert.NoError(t, err2, "Validation should succeed for packed structure")
+	ret, err := DecodeBuffer(actual, chain)
+	assert.NoError(t, err, "Validation should succeed for packed structure")
+
+	expectedMeta := map[string]any{
+		"role": "admin",
+	}
+	expectedName := "gopher"
+
+	// Check map values without assuming order
+	resultMap, ok := ret.(map[string]any)
+	assert.True(t, ok, "element should be a map")
+
+	// Compare "meta" submap
+	metaMap, ok := resultMap["meta"].(map[string]any)
+	assert.True(t, ok, "meta should be a map")
+	assert.EqualValues(t, expectedMeta, metaMap)
+
+	// Compare "name"
+	assert.Equal(t, expectedName, resultMap["name"])
+
+}
+
 func TestDecodePackedTuples(t *testing.T) {
 	actual := pack.Pack(
 		pack.PackTuple(
@@ -341,6 +387,42 @@ func TestDecodeChain_DateEmailPrefixSuffix_Success(t *testing.T) {
 		SString.Pattern(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`), // email
 		SString.Prefix("prefix-"),                                           // prefix match
 		SString.Suffix("-suffix"),                                           // suffix match
+	)
+
+	ret, err := DecodeBuffer(actual, chain)
+	assert.NoError(t, err, "Decoding should succeed with correct date, range, email, prefix, and suffix")
+
+	// Expected decoded values
+	expected := []any{
+		"2025-09-10",
+		int32(42),
+		"alice@example.com",
+		"prefix-hello",
+		"world-suffix",
+	}
+
+	// Print for debugging
+	fmt.Println("Decoded:", ret)
+
+	// Assert equality
+	assert.Equal(t, expected, ret, "Decoded values should match expected sequence")
+}
+
+func TestDecodeChain_Default_Success(t *testing.T) {
+	actual := pack.Pack(
+		pack.PackString("2025-09-10"), // date
+		pack.PackInt32(42),            // range
+		pack.PackString(""),           // email
+		pack.PackString(""),           // prefix
+		pack.PackString(""),           // suffix
+	)
+
+	chain := SChain(
+		SString.Pattern(`^\d{4}-\d{2}-\d{2}$`), // date pattern YYYY-MM-DD
+		SInt32.Range(1, 100),                   // int range
+		SString.DefaultDecodeValue("alice@example.com").Pattern(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`), // email
+		SString.DefaultDecodeValue("prefix-hello").Prefix("prefix-"),                                                // prefix match
+		SString.DefaultDecodeValue("world-suffix").Suffix("-suffix"),                                                // suffix match
 	)
 
 	ret, err := DecodeBuffer(actual, chain)

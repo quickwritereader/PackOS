@@ -56,13 +56,14 @@ func TestBuildScheme_WithRepeatTuples(t *testing.T) {
 
 func TestBuildScheme_NamedTuple(t *testing.T) {
 	schemeJSON := SchemeJSON{
-		Type:       "tupleNamedVal",
+		Type:       "tuple",
 		FieldNames: []string{"id", "name", "active"},
 		Schema: []SchemeJSON{
 			{Type: "int32"},
 			{Type: "string"},
 			{Type: "bool", Nullable: true},
 		},
+		VariableLength: true,
 	}
 
 	built := BuildScheme(schemeJSON)

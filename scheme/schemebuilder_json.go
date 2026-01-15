@@ -12,16 +12,18 @@ type SchemeJSON struct {
 	Nullable       bool         `json:"nullable,omitempty"`
 	VariableLength bool         `json:"variableLength,omitempty"`
 	Flatten        bool         `json:"flatten,omitempty"`
+	OptionalMap    bool         `json:"optionalMap,omitempty"`
 
 	// Constraint helpers
-	Exact    string `json:"exact,omitempty"`
-	Prefix   string `json:"prefix,omitempty"`
-	Suffix   string `json:"suffix,omitempty"`
-	Pattern  string `json:"pattern,omitempty"`
-	RangeMin int64  `json:"rangeMin,omitempty"`
-	RangeMax int64  `json:"rangeMax,omitempty"`
-	DateFrom string `json:"dateFrom,omitempty"`
-	DateTo   string `json:"dateTo,omitempty"`
+	Exact         string `json:"exact,omitempty"`
+	Prefix        string `json:"prefix,omitempty"`
+	Suffix        string `json:"suffix,omitempty"`
+	Pattern       string `json:"pattern,omitempty"`
+	RangeMin      int64  `json:"rangeMin,omitempty"`
+	RangeMax      int64  `json:"rangeMax,omitempty"`
+	DateFrom      string `json:"dateFrom,omitempty"`
+	DateTo        string `json:"dateTo,omitempty"`
+	DecodeDefault string `json:"decodeDefault,omitempty"`
 
 	// Extra metadata for UI or other purposes
 	Extra map[string]any `json:"extra,omitempty"`
@@ -84,7 +86,10 @@ func BuildScheme(js SchemeJSON) Scheme {
 	case "string":
 		s := SString
 		if js.Width > 0 {
-			return s.WithWidth(js.Width)
+			s = s.WithWidth(js.Width)
+		}
+		if js.DecodeDefault != "" {
+			s = s.DefaultDecodeValue(js.DecodeDefault)
 		}
 		if js.Exact != "" {
 			return s.Match(js.Exact)
@@ -108,17 +113,22 @@ func BuildScheme(js SchemeJSON) Scheme {
 		return SAny
 
 	case "tuple":
+		if len(js.FieldNames) > 0 {
+
+			if js.VariableLength && js.Flatten {
+				return STupleNamedValFlattened(js.FieldNames, buildSchemas(js.Schema)...)
+			} else if js.VariableLength {
+				return STupleNamedVal(js.FieldNames, buildSchemas(js.Schema)...)
+			}
+			return STupleNamed(js.FieldNames, buildSchemas(js.Schema)...)
+
+		}
+		if js.VariableLength && js.Flatten {
+			return STupleValFlatten(buildSchemas(js.Schema)...)
+		} else if js.VariableLength {
+			return STupleVal(buildSchemas(js.Schema)...)
+		}
 		return STuple(buildSchemas(js.Schema)...)
-	case "tupleVal":
-		return STupleVal(buildSchemas(js.Schema)...)
-	case "tupleValFlattened":
-		return STupleValFlatten(buildSchemas(js.Schema)...)
-
-	case "tupleNamedVal":
-		return STupleNamedVal(js.FieldNames, buildSchemas(js.Schema)...)
-	case "tupleNamedValFlattened":
-		return STupleNamedValFlattened(js.FieldNames, buildSchemas(js.Schema)...)
-
 	case "repeat":
 		return SRepeat(js.Min, js.Max, buildSchemas(js.Schema)...)
 
@@ -128,6 +138,9 @@ func BuildScheme(js SchemeJSON) Scheme {
 		mapped := make(map[string]Scheme)
 		for i, sub := range js.Schema {
 			mapped[js.FieldNames[i]] = BuildScheme(sub)
+		}
+		if js.OptionalMap {
+			return SMapUnorderedOptional(mapped)
 		}
 		return SMapUnordered(mapped)
 
