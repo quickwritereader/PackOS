@@ -11,7 +11,6 @@ import (
 
 	"github.com/quickwritereader/PackOS/access"
 	"github.com/quickwritereader/PackOS/types"
-	"github.com/quickwritereader/PackOS/utils"
 )
 
 type ErrorCode int
@@ -180,7 +179,13 @@ func (f SchemeGeneric) Encode(put *access.PutAccess, val any) error {
 	return f.EncodeFunc(put, val)
 }
 
-type SchemeAny struct{}
+type SchemeAny struct {
+	DecodeAsOrderedMap bool
+}
+
+func SchemeAnyOrdered() SchemeAny {
+	return SchemeAny{DecodeAsOrderedMap: true}
+}
 
 func (s SchemeAny) Validate(seq *access.SeqGetAccess) error {
 	if err := seq.Advance(); err != nil {
@@ -190,7 +195,7 @@ func (s SchemeAny) Validate(seq *access.SeqGetAccess) error {
 }
 
 func (s SchemeAny) Decode(seq *access.SeqGetAccess) (any, error) {
-	v, err := access.DecodeTupleGeneric(seq, true)
+	v, err := access.DecodeTupleGeneric(seq, true, s.DecodeAsOrderedMap)
 	if err != nil {
 		return nil, NewSchemeError(ErrInvalidFormat, SchemeAnyName, "", seq.CurrentIndex(), err)
 	}
@@ -273,6 +278,7 @@ type SchemeMap struct {
 	Schema []Scheme
 }
 
+// Validate checks that the sequence matches the SchemeMap definition.
 func (s SchemeMap) Validate(seq *access.SeqGetAccess) error {
 	pos := seq.CurrentIndex()
 	_, err := precheck(SchemeMapName, pos, seq, types.TypeMap, s.Width, s.IsNullable())
@@ -298,6 +304,7 @@ func (s SchemeMap) Validate(seq *access.SeqGetAccess) error {
 	return nil
 }
 
+// Decode reads a SchemeMap from the sequence into an OrderedMapAny.
 func (s SchemeMap) Decode(seq *access.SeqGetAccess) (any, error) {
 	pos := seq.CurrentIndex()
 	_, err := precheck(SchemeMapName, pos, seq, types.TypeMap, s.Width, s.IsNullable())
@@ -306,17 +313,23 @@ func (s SchemeMap) Decode(seq *access.SeqGetAccess) (any, error) {
 	}
 
 	if len(s.Schema)%2 != 0 {
-		return nil, NewSchemeError(ErrConstraintViolated, SchemeMapName, "", pos, SizeExact{Actual: len(s.Schema), Exact: len(s.Schema) + 1})
+		return nil, NewSchemeError(
+			ErrConstraintViolated,
+			SchemeMapName,
+			"",
+			pos,
+			SizeExact{Actual: len(s.Schema), Exact: len(s.Schema) + 1},
+		)
 	}
 
-	var out map[string]any
+	var out *types.OrderedMapAny
 	if s.Width != 0 {
 		sub, err := seq.PeekNestedSeq()
 		if err != nil {
 			return nil, NewSchemeError(ErrInvalidFormat, SchemeMapName, "", pos, err)
 		}
 
-		out = make(map[string]any, sub.ArgCount()/2)
+		out = types.NewOrderedMapAny()
 		for i := 0; i < len(s.Schema); i += 2 {
 			key, err := s.Schema[i].Decode(sub)
 			if err != nil {
@@ -328,7 +341,7 @@ func (s SchemeMap) Decode(seq *access.SeqGetAccess) (any, error) {
 				return nil, NewSchemeError(ErrInvalidFormat, SchemeMapName, keyStr, pos, err)
 			}
 			if keyStr, ok := key.(string); ok {
-				out[keyStr] = value
+				out.Set(keyStr, value)
 			} else {
 				return nil, NewSchemeError(ErrInvalidFormat, SchemeMapName, "", pos-1, ErrUnsupportedType)
 			}
@@ -341,34 +354,41 @@ func (s SchemeMap) Decode(seq *access.SeqGetAccess) (any, error) {
 	return out, nil
 }
 
+// Encode writes an OrderedMapAny into the sequence according to the SchemeMap.
 func (s SchemeMap) Encode(put *access.PutAccess, val any) error {
 	if s.IsNullable() && val == nil && len(s.Schema) < 1 {
 		put.AddMapAny(nil, true)
 	}
 
 	if len(s.Schema)%2 != 0 {
-		return NewSchemeError(ErrConstraintViolated, SchemeMapName, "", -1, SizeExact{Actual: len(s.Schema), Exact: len(s.Schema) + 1})
+		return NewSchemeError(
+			ErrConstraintViolated,
+			SchemeMapName,
+			"",
+			-1,
+			SizeExact{Actual: len(s.Schema), Exact: len(s.Schema) + 1},
+		)
 	}
 
-	if mapKV, ok := val.(map[string]any); ok {
-		keys := utils.SortKeys(mapKV)
-		if len(keys) != len(s.Schema)/2 {
-			return NewSchemeError(ErrInvalidFormat, SchemeMapName, "", -1, SizeExact{Actual: len(keys), Exact: len(s.Schema) / 2})
+	if om, ok := val.(*types.OrderedMapAny); ok {
+		if om.Len() != len(s.Schema)/2 {
+			return NewSchemeError(ErrInvalidFormat, SchemeMapName,
+				"", -1, SizeExact{Actual: om.Len(), Exact: len(s.Schema) / 2},
+			)
 		}
 		nested := put.BeginMap()
 		defer put.EndNested(nested)
-		j := 0
-		for i := 0; i < len(s.Schema); i += 2 {
-			k := keys[j]
-			err := s.Schema[i].Encode(nested, k)
-			if err != nil {
+
+		i := 0
+
+		for k, v := range om.ItemsIter() {
+			if err := s.Schema[i].Encode(nested, k); err != nil {
 				return NewSchemeError(ErrInvalidFormat, SchemeMapName, k, -1, err)
 			}
-			err = s.Schema[i+1].Encode(nested, mapKV[k])
-			if err != nil {
+			if err := s.Schema[i+1].Encode(nested, v); err != nil {
 				return NewSchemeError(ErrInvalidFormat, SchemeMapName, k, -1, err)
 			}
-			j++
+			i += 2
 		}
 
 	} else {
@@ -378,7 +398,8 @@ func (s SchemeMap) Encode(put *access.PutAccess, val any) error {
 }
 
 type SchemeTypeOnly struct {
-	Tag types.Type
+	Tag             types.Type
+	DecodeOrdereMap bool
 }
 
 func (s SchemeTypeOnly) Validate(seq *access.SeqGetAccess) error {
@@ -388,6 +409,9 @@ func (s SchemeTypeOnly) Validate(seq *access.SeqGetAccess) error {
 func (s SchemeTypeOnly) Decode(seq *access.SeqGetAccess) (any, error) {
 	switch s.Tag {
 	case types.TypeMap:
+		if s.DecodeOrdereMap {
+			return access.DecodeMapAny(seq)
+		}
 		return access.DecodeMapAny(seq)
 	case types.TypeTuple:
 		return access.DecodeTuple(seq)
@@ -468,9 +492,16 @@ func (s SchemeTypeOnly) Encode(put *access.PutAccess, val any) error {
 		}
 
 	case types.TypeMap:
-		if v, ok := val.(map[string]any); ok {
+		switch v := val.(type) {
+		case map[string]any:
 			put.AddMapAny(v, true)
-		} else {
+
+		case *types.OrderedMapAny:
+			if err := put.AddMapAnyOrdered(v, true); err != nil {
+				return NewSchemeError(ErrEncode, SchemeTypeOnlyName, "", -1, err)
+			}
+
+		default:
 			return NewSchemeError(ErrEncode, SchemeTypeOnlyName, "", -1, ErrTypeMisMatch)
 		}
 

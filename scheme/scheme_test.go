@@ -253,10 +253,11 @@ func TestDecodePackedStructure(t *testing.T) {
 	expectedFloat32 := float32(3.14)
 	expectedInt64 := int64(9876543210)
 	expectedBool := true
-	expectedMeta := map[string]any{
-		"role": []byte("admin"),
-		"user": []byte("alice"),
-	}
+	expectedMeta := types.NewOrderedMapAny(
+		types.OPAny("role", []byte("admin")),
+		types.OPAny("user", []byte("alice")),
+	)
+
 	expectedName := "gopher"
 
 	// ret should be []any
@@ -268,18 +269,21 @@ func TestDecodePackedStructure(t *testing.T) {
 	assert.Equal(t, expectedFloat32, resultSlice[1])
 	assert.Equal(t, expectedInt64, resultSlice[2])
 	assert.Equal(t, expectedBool, resultSlice[3])
-
 	// Check map values without assuming order
-	resultMap, ok := resultSlice[4].(map[string]any)
-	assert.True(t, ok, "Last element should be a map")
+	resultMap, ok := resultSlice[4].(*types.OrderedMapAny)
+	assert.True(t, ok, "Last element should be an OrderedMapAny")
 
 	// Compare "meta" submap
-	metaMap, ok := resultMap["meta"].(map[string]any)
-	assert.True(t, ok, "meta should be a map")
-	assert.EqualValues(t, expectedMeta, metaMap)
+	metaMap, ok := resultMap.Get("meta")
+	assert.True(t, ok, "meta should exist")
+	omMeta, ok := metaMap.(*types.OrderedMapAny)
+	assert.True(t, ok, "meta should be an OrderedMapAny")
+	assert.True(t, omMeta.Equal(expectedMeta), "meta OrderedMapAny does not match expected")
 
 	// Compare "name"
-	assert.Equal(t, expectedName, resultMap["name"])
+	valName, ok := resultMap.Get("name")
+	assert.True(t, ok, "name should exist")
+	assert.Equal(t, expectedName, valName)
 
 }
 
@@ -315,17 +319,16 @@ func TestDecodePackedMapUnOrderedOptional(t *testing.T) {
 	}
 	expectedName := "gopher"
 
-	// Check map values without assuming order
-	resultMap, ok := ret.(map[string]any)
-	assert.True(t, ok, "element should be a map")
+	// Top-level result should be an OrderedMapAny
+	resultMap, ok := ret.(*types.OrderedMapAny)
+	assert.True(t, ok, "element should be an OrderedMapAny")
 
 	// Compare "meta" submap
-	metaMap, ok := resultMap["meta"].(map[string]any)
-	assert.True(t, ok, "meta should be a map")
+	metaMap := types.GetAs[map[string]any](resultMap, "meta")
 	assert.EqualValues(t, expectedMeta, metaMap)
 
 	// Compare "name"
-	assert.Equal(t, expectedName, resultMap["name"])
+	assert.Equal(t, expectedName, types.GetAs[string](resultMap, "name"))
 
 }
 
@@ -1030,13 +1033,13 @@ func TestEncodePackedStructure(t *testing.T) {
 		float32(3.14),
 		int64(9876543210),
 		true,
-		map[string]any{
-			"meta": map[string]any{
-				"role": []byte("admin"),
-				"user": []byte("alice"),
-			},
-			"name": "gopher",
-		},
+		types.NewOrderedMapAny(
+			types.OPAny("meta", types.NewOrderedMapAny(
+				types.OPAny("role", []byte("admin")),
+				types.OPAny("user", []byte("alice")),
+			)),
+			types.OPAny("name", "gopher"),
+		),
 	}
 
 	actual, err := EncodeValue(val, chain)
@@ -1065,14 +1068,14 @@ func TestEncodePackedStructure_WithInvalidValues(t *testing.T) {
 	)
 
 	// Value to encode
-	val := map[string]any{
-		"meta": map[string]any{
+	val := types.NewOrderedMapAny(
+		types.OPAny("meta", map[string]any{
 			"user": []byte("alice"),
 			"role": "adminX",  // invalid
 			"age":  int32(17), // out of range
-		},
-		"name": "gopher",
-	}
+		}),
+		types.OPAny("name", "gopher"),
+	)
 
 	actual, err := EncodeValue(val, chain)
 
@@ -1099,14 +1102,15 @@ func TestEncodePackedStructure_WithValidValues(t *testing.T) {
 	)
 
 	// Value to encode
-	val := map[string]any{
-		"meta": map[string]any{
+	val := types.NewOrderedMapAny(
+		types.OPAny("meta", map[string]any{
 			"user": []byte("alice"),
-			"role": "admin",   // valid
-			"age":  int32(25), // valid
-		},
-		"name": "gopher",
-	}
+			"role": "admin",
+			"age":  int32(27),
+		}),
+		types.OPAny("name", "gopher"),
+	)
+
 	actual, err := EncodeValue(val, chain)
 	assert.NoError(t, err, "Encoding should succeed with valid values")
 

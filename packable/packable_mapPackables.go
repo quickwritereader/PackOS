@@ -200,6 +200,71 @@ func (p PackMapStrInt64) Write(buf []byte, pos int) int {
 	return pos
 }
 
+// Pair for Packable values
+type PackPair struct {
+	Key   string
+	Value access.Packable
+}
+
+func PP(key string, value access.Packable) PackPair {
+	return PackPair{Key: key, Value: value}
+}
+
+// PackableMapOrdered packs Packable values using OrderedMap to preserve insertion order.
+type PackableMapOrdered struct {
+	om *types.OrderedMap[access.Packable]
+}
+
+// PackMapOrdered creates a new PackableMapOrdered, optionally initialized with pairs.
+func PackMapOrdered(pairs ...PackPair) *PackableMapOrdered {
+	om := types.NewOrderedMap[access.Packable]()
+	for _, p := range pairs {
+		om.Set(p.Key, p.Value)
+	}
+	return &PackableMapOrdered{om: om}
+}
+
+// Set adds or updates a key/value pair.
+func (p *PackableMapOrdered) Set(key string, val access.Packable) {
+	p.om.Set(key, val)
+}
+
+// ValueSize returns the size of the packed map's content.
+func (p *PackableMapOrdered) ValueSize() int {
+	size := 0
+	for k, v := range p.om.ItemsIter() {
+		size += len(k) + v.ValueSize()
+	}
+	return size + len(p.om.Keys())*2*access.HeaderTagSize + access.HeaderTagSize
+}
+
+// HeaderType returns the type of the header for a map.
+func (p *PackableMapOrdered) HeaderType() types.Type {
+	return types.TypeMap
+}
+
+// Write packs the map into a byte buffer in insertion order.
+func (p *PackableMapOrdered) Write(buf []byte, pos int) int {
+	headerSize := len(p.om.Keys())*2*access.HeaderTagSize + access.HeaderTagSize
+	first := pos
+	posH := pos
+	pos += headerSize
+	deltaStart := pos
+
+	for k, v := range p.om.ItemsIter() {
+		posH = access.WriteTypeHeader(buf, posH, pos-deltaStart, types.TypeString)
+		pos = access.WriteString(buf, pos, k)
+		posH = access.WriteTypeHeader(buf, posH, pos-deltaStart, v.HeaderType())
+		pos = v.Write(buf, pos)
+	}
+
+	// End-of-container marker
+	_ = access.WriteTypeHeader(buf, first, headerSize, types.TypeString)
+	_ = access.WriteTypeHeader(buf, posH, pos-deltaStart, types.TypeEnd)
+
+	return pos
+}
+
 func (pack PackMap) PackInto(p *access.PutAccess) {
 	size := pack.ValueSize()
 	buffer := bPool.Acquire(size)
@@ -219,6 +284,16 @@ func (pack PackMapSorted) PackInto(p *access.PutAccess) {
 }
 
 func (pack PackMapStr) PackInto(p *access.PutAccess) {
+	size := pack.ValueSize()
+	buffer := bPool.Acquire(size)
+	pos := 0
+	pos = pack.Write(buffer, pos)
+	p.AppendTagAndValue(types.TypeMap, buffer[:pos])
+	bPool.Release(buffer)
+}
+
+// PackInto packs the ordered map into the PutAccess buffer.
+func (pack *PackableMapOrdered) PackInto(p *access.PutAccess) {
 	size := pack.ValueSize()
 	buffer := bPool.Acquire(size)
 	pos := 0

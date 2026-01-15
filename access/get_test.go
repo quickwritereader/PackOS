@@ -3,6 +3,7 @@ package access
 import (
 	"testing"
 
+	"github.com/quickwritereader/PackOS/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -59,6 +60,39 @@ func TestGetAccess_Map2(t *testing.T) {
 		"role": "admin",
 		"user": "alice",
 	}, m)
+}
+
+func TestGetAccess_MapOrderedAny(t *testing.T) {
+	buf := []byte{
+		0x27, 0x00, 0xE0, 0x00,
+		0x56, 0x00, 0x26, 0x00, 0x4E, 0x00, 0x6E, 0x00, 0x90, 0x00,
+		'r', 'o', 'l', 'e',
+		'a', 'd', 'm', 'i', 'n',
+		'u', 's', 'e', 'r',
+		'a', 'l', 'i', 'c', 'e',
+	}
+	get := NewGetAccess(buf)
+
+	om, err := get.GetMapOrderedAny(0)
+	require.NoError(t, err)
+	require.NotNil(t, om)
+
+	// Build expected ordered map
+	expected := types.NewOrderedMapAny(
+		types.OPAny("role", "admin"),
+		types.OPAny("user", "alice"),
+	)
+
+	// Use Equal method to compare
+	assert.True(t, om.Equal(expected), "decoded OrderedMapAny does not match expected")
+
+	// Also check insertion order explicitly
+	keys := []string{}
+	for k := range om.KeysIter() {
+		keys = append(keys, k)
+	}
+
+	assert.Equal(t, []string{"role", "user"}, keys)
 }
 
 func TestGetAccess_IntThenMapWithInnerMapAndString(t *testing.T) {
