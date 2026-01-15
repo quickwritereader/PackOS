@@ -479,6 +479,8 @@ func packAnyValue(p *PutAccess, v any, useNumeric bool) error {
 		p.AddMap(val)
 	case []string:
 		p.AddStringArray(val)
+	case *types.OrderedMap[any]:
+		err = p.AddMapAnyOrdered(val, useNumeric)
 	case []interface{}:
 		err = p.AddAnyTuple(val, useNumeric)
 	case Packable:
@@ -525,6 +527,8 @@ func packAnyValueSortedMap(p *PutAccess, v any, useNumeric bool) error {
 		p.AddMapAny(val, useNumeric)
 	case map[string][]byte:
 		p.AddMapSortedKey(val)
+	case *types.OrderedMap[any]:
+		err = p.AddMapAnyOrdered(val, useNumeric)
 	case Packable:
 		val.PackInto(p)
 	case []interface{}:
@@ -571,6 +575,29 @@ func (p *PutAccess) AddMapAnySortedKey(m map[string]any, useNumeric bool) error 
 			nested.AddString(k)
 			if err := packAnyValueSortedMap(nested, m[k], useNumeric); err != nil {
 				return fmt.Errorf("AddMapAnySortedKey: key %q: %w", k, err)
+			}
+		}
+		p.appendAndReleaseNested(nested)
+	}
+	return nil
+}
+
+// AddMapAnyOrdered encodes an OrderedMap[string→any] preserving insertion order.
+func (p *PutAccess) AddMapAnyOrdered(om *types.OrderedMap[any], useNumeric bool) error {
+	// Write map header
+	p.offsets = binary.LittleEndian.AppendUint16(
+		p.offsets,
+		types.EncodeHeader(p.position, types.TypeMap),
+	)
+
+	if om != nil && om.Len() > 0 {
+		nested := NewPutAccessFromPool()
+		for k, v := range om.ItemsIter() {
+			// Add key
+			nested.AddString(k)
+			// Add value
+			if err := packAnyValue(nested, v, useNumeric); err != nil {
+				return fmt.Errorf("AddMapAnyOrdered: key %q: %w", k, err)
 			}
 		}
 		p.appendAndReleaseNested(nested)
