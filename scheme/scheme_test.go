@@ -3,11 +3,13 @@ package scheme
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/quickwritereader/PackOS/access"
 	pack "github.com/quickwritereader/PackOS/packable"
 	"github.com/quickwritereader/PackOS/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidatePackedStructure(t *testing.T) {
@@ -44,7 +46,7 @@ func TestValidatePackedStructure(t *testing.T) {
 	)
 
 	err := ValidateBuffer(actual, chain)
-	assert.NoError(t, err, "Validation should succeed for packed structure")
+	require.NoError(t, err, "Validation should succeed for packed structure")
 }
 
 func TestValidatePackedStructure_Failure(t *testing.T) {
@@ -158,7 +160,7 @@ func TestValidateUnorderedMap_ShuffledDeclaration_Success(t *testing.T) {
 	)
 
 	err := ValidateBuffer(actual, chain)
-	assert.NoError(t, err, "Validation should succeed regardless of key declaration order")
+	require.NoError(t, err, "Validation should succeed regardless of key declaration order")
 }
 
 func TestValidateChain_DateEmailPrefixSuffix_Success(t *testing.T) {
@@ -179,7 +181,33 @@ func TestValidateChain_DateEmailPrefixSuffix_Success(t *testing.T) {
 	)
 
 	err := ValidateBuffer(actual, chain)
-	assert.NoError(t, err, "Validation should succeed with correct date, range, email, prefix, and suffix")
+	require.NoError(t, err, "Validation should succeed with correct date, range, email, prefix, and suffix")
+}
+
+func TestValidateChain_DateEmailPrefixSuffix_Success2(t *testing.T) {
+	actual := pack.Pack(
+		pack.PackString(""),                  // optional email
+		pack.PackString("2025-09-10"),        // date
+		pack.PackInt32(42),                   // range
+		pack.PackString("alice@example.com"), // email
+		pack.PackString("prefix-hello"),      // prefix
+		pack.PackString("world-suffix"),      // suffix
+		pack.PackString(""),                  // empty
+	)
+
+	chain := SChain(
+		SEmail(true),                           // optional email (empty allowed)
+		SString.Pattern(`^\d{4}-\d{2}-\d{2}$`), // date pattern YYYY-MM-DD
+		SInt32.Range(1, 100),                   // int range
+		SEmail(false),                          // email scheme (uses net/mail)
+		SString.Prefix("prefix-"),              // prefix match
+		SString.Suffix("-suffix"),              // suffix match
+		SString.Optional().Suffix("-suffix"),   // suffix match
+	)
+
+	err := ValidateBuffer(actual, chain)
+	require.NoError(t, err,
+		"Validation should succeed with correct date, range, email, prefix, and suffix")
 }
 
 func TestValidatePackedTuples(t *testing.T) {
@@ -210,7 +238,7 @@ func TestValidatePackedTuples(t *testing.T) {
 	)
 
 	err := ValidateBuffer(actual, chain)
-	assert.NoError(t, err, "Validation should succeed for two packed tuples")
+	require.NoError(t, err, "Validation should succeed for two packed tuples")
 }
 
 func TestDecodePackedStructure(t *testing.T) {
@@ -247,7 +275,7 @@ func TestDecodePackedStructure(t *testing.T) {
 	)
 
 	ret, err := DecodeBuffer(actual, chain)
-	assert.NoError(t, err, "Validation should succeed for packed structure")
+	require.NoError(t, err, "Validation should succeed for packed structure")
 	// Expected values
 	expectedInt16 := int16(12345)
 	expectedFloat32 := float32(3.14)
@@ -262,7 +290,7 @@ func TestDecodePackedStructure(t *testing.T) {
 
 	// ret should be []any
 	resultSlice, ok := ret.([]any)
-	assert.True(t, ok, "Decoded result should be a slice")
+	require.True(t, ok, "Decoded result should be a slice")
 
 	// Check primitive values
 	assert.Equal(t, expectedInt16, resultSlice[0])
@@ -271,18 +299,18 @@ func TestDecodePackedStructure(t *testing.T) {
 	assert.Equal(t, expectedBool, resultSlice[3])
 	// Check map values without assuming order
 	resultMap, ok := resultSlice[4].(*types.OrderedMapAny)
-	assert.True(t, ok, "Last element should be an OrderedMapAny")
+	require.True(t, ok, "Last element should be an OrderedMapAny")
 
 	// Compare "meta" submap
 	metaMap, ok := resultMap.Get("meta")
-	assert.True(t, ok, "meta should exist")
+	require.True(t, ok, "meta should exist")
 	omMeta, ok := metaMap.(*types.OrderedMapAny)
-	assert.True(t, ok, "meta should be an OrderedMapAny")
-	assert.True(t, omMeta.Equal(expectedMeta), "meta OrderedMapAny does not match expected")
+	require.True(t, ok, "meta should be an OrderedMapAny")
+	require.True(t, omMeta.Equal(expectedMeta), "meta OrderedMapAny does not match expected")
 
 	// Compare "name"
 	valName, ok := resultMap.Get("name")
-	assert.True(t, ok, "name should exist")
+	require.True(t, ok, "name should exist")
 	assert.Equal(t, expectedName, valName)
 
 }
@@ -310,9 +338,9 @@ func TestDecodePackedMapUnOrderedOptional(t *testing.T) {
 	)
 
 	err2 := ValidateBuffer(actual, chain)
-	assert.NoError(t, err2, "Validation should succeed for packed structure")
+	require.NoError(t, err2, "Validation should succeed for packed structure")
 	ret, err := DecodeBuffer(actual, chain)
-	assert.NoError(t, err, "Validation should succeed for packed structure")
+	require.NoError(t, err, "Validation should succeed for packed structure")
 
 	expectedMeta := map[string]any{
 		"role": "admin",
@@ -321,7 +349,7 @@ func TestDecodePackedMapUnOrderedOptional(t *testing.T) {
 
 	// Top-level result should be an OrderedMapAny
 	resultMap, ok := ret.(*types.OrderedMapAny)
-	assert.True(t, ok, "element should be an OrderedMapAny")
+	require.True(t, ok, "element should be an OrderedMapAny")
 
 	// Compare "meta" submap
 	metaMap := types.GetAs[map[string]any](resultMap, "meta")
@@ -360,7 +388,7 @@ func TestDecodePackedTuples(t *testing.T) {
 	)
 
 	ret, err := DecodeBuffer(actual, chain)
-	assert.NoError(t, err, "Decoding should succeed for two packed tuples")
+	require.NoError(t, err, "Decoding should succeed for two packed tuples")
 
 	// Expected structure: slice of two tuples
 	expected := []any{
@@ -393,7 +421,7 @@ func TestDecodeChain_DateEmailPrefixSuffix_Success(t *testing.T) {
 	)
 
 	ret, err := DecodeBuffer(actual, chain)
-	assert.NoError(t, err, "Decoding should succeed with correct date, range, email, prefix, and suffix")
+	require.NoError(t, err, "Decoding should succeed with correct date, range, email, prefix, and suffix")
 
 	// Expected decoded values
 	expected := []any{
@@ -429,7 +457,7 @@ func TestDecodeChain_Default_Success(t *testing.T) {
 	)
 
 	ret, err := DecodeBuffer(actual, chain)
-	assert.NoError(t, err, "Decoding should succeed with correct date, range, email, prefix, and suffix")
+	require.NoError(t, err, "Decoding should succeed with correct date, range, email, prefix, and suffix")
 
 	// Expected decoded values
 	expected := []any{
@@ -480,7 +508,7 @@ func TestDecodePackedTuplesNamed(t *testing.T) {
 	}
 
 	ret, err := DecodeBufferNamed(actual, chain)
-	assert.NoError(t, err, "Decoding should succeed for two named packed tuples")
+	require.NoError(t, err, "Decoding should succeed for two named packed tuples")
 
 	expected := map[string]any{
 		"firstTuple": map[string]any{
@@ -517,7 +545,7 @@ func TestDecodeSTypeTuple(t *testing.T) {
 	)
 
 	ret, err := DecodeBuffer(actual, chain)
-	assert.NoError(t, err, "Decoding should succeed when expecting a tuple type")
+	require.NoError(t, err, "Decoding should succeed when expecting a tuple type")
 
 	// Since SType only validates type, Decode returns the raw payload
 	// In this case, it will decode the tuple into []any
@@ -568,7 +596,7 @@ func TestDecodePackedTuples_ExtraTuplesIgnored(t *testing.T) {
 	)
 
 	ret, err := DecodeBuffer(actual, chain)
-	assert.NoError(t, err, "Decoding should succeed even with extra tuples in buffer")
+	require.NoError(t, err, "Decoding should succeed even with extra tuples in buffer")
 
 	// Expected: only the first two tuples decoded
 	expected := []any{
@@ -623,7 +651,7 @@ func TestDecodePackedTuples_WithRepeat(t *testing.T) {
 	)
 
 	ret, err := DecodeBuffer(actual, chain)
-	assert.NoError(t, err, "Decoding should succeed with repeat scheme")
+	require.NoError(t, err, "Decoding should succeed with repeat scheme")
 
 	// Expected: all tuples decoded
 	expected := []any{
@@ -658,7 +686,7 @@ func TestDecodeTupleWithRepeatField(t *testing.T) {
 	)
 
 	ret, err := DecodeBuffer(actual, chain)
-	assert.NoError(t, err, "Decoding should succeed with repeat inside tuple")
+	require.NoError(t, err, "Decoding should succeed with repeat inside tuple")
 
 	// Expected: tuple with repeated field as slice
 	expected := []any{
@@ -686,7 +714,7 @@ func TestDecodeTupleWithRepeatField(t *testing.T) {
 
 	ret2, err := DecodeBuffer(actual, chain2)
 	fmt.Println("Decoded Flattened:", ret2)
-	assert.NoError(t, err, "Decoding should succeed with repeat inside tuple")
+	require.NoError(t, err, "Decoding should succeed with repeat inside tuple")
 	assert.Equal(t, generic, ret2, "Decoder should decode repeated field inside tuple correctly as generic decoder")
 
 }
@@ -723,7 +751,7 @@ func TestDecodeNamedTupleValAndFlattened(t *testing.T) {
 
 	// Decode with strict schema
 	decodedStrict, err := DecodeBuffer(actual, chainStrict)
-	assert.NoError(t, err, "Strict named tuple decode should succeed")
+	require.NoError(t, err, "Strict named tuple decode should succeed")
 
 	expectedStrict := map[string]any{
 		"id":    int32(42),
@@ -736,7 +764,7 @@ func TestDecodeNamedTupleValAndFlattened(t *testing.T) {
 
 	// Decode with flattened schema
 	decodedFlat, err := DecodeBuffer(actual, chainFlat)
-	assert.NoError(t, err, "Flattened named tuple decode should succeed")
+	require.NoError(t, err, "Flattened named tuple decode should succeed")
 
 	expectedFlat := map[string]any{
 		"id":     int32(42),
@@ -819,7 +847,7 @@ func TestEncodeFlattenedTuple(t *testing.T) {
 	}
 
 	actual, err := EncodeValue(val, chainFlat)
-	assert.NoError(t, err, "Flattened named tuple encode should succeed")
+	require.NoError(t, err, "Flattened named tuple encode should succeed")
 
 	fmt.Println("EncodedFlat:", actual)
 	assert.Equal(t, expected, actual)
@@ -875,7 +903,7 @@ func TestEncodePackedTuples_WithRepeat(t *testing.T) {
 	}
 
 	actual, err := EncodeValue(val, chain)
-	assert.NoError(t, err, "Encoding should succeed with repeat scheme")
+	require.NoError(t, err, "Encoding should succeed with repeat scheme")
 
 	fmt.Println("Encoded:", actual)
 
@@ -917,7 +945,7 @@ func TestEncodeTupleWithRepeatField_Flattened(t *testing.T) {
 	}
 
 	actual, err := EncodeValue(val, chain1)
-	assert.NoError(t, err, "Encoding should succeed with flattened repeat inside tuple")
+	require.NoError(t, err, "Encoding should succeed with flattened repeat inside tuple")
 
 	fmt.Println("Encoded Flattened:", actual)
 
@@ -984,7 +1012,7 @@ func TestEncodeTupleWithRepeatField_Flattened_WithMaxBeforeEnd(t *testing.T) {
 	}
 
 	actual, err := EncodeValue(val, chain)
-	assert.NoError(t, err, "Encoding should succeed when repeat is not last but max is provided")
+	require.NoError(t, err, "Encoding should succeed when repeat is not last but max is provided")
 
 	fmt.Println("Encoded Flattened WithMax:", actual)
 
@@ -1043,7 +1071,7 @@ func TestEncodePackedStructure(t *testing.T) {
 	}
 
 	actual, err := EncodeValue(val, chain)
-	assert.NoError(t, err, "Encoding packed structure should succeed")
+	require.NoError(t, err, "Encoding packed structure should succeed")
 
 	fmt.Println("Encoded:", actual)
 
@@ -1112,7 +1140,7 @@ func TestEncodePackedStructure_WithValidValues(t *testing.T) {
 	)
 
 	actual, err := EncodeValue(val, chain)
-	assert.NoError(t, err, "Encoding should succeed with valid values")
+	require.NoError(t, err, "Encoding should succeed with valid values")
 
 	fmt.Println("Encoded Valid:", actual)
 
@@ -1173,7 +1201,7 @@ func TestEncodePackedTuplesNamed(t *testing.T) {
 	}
 
 	actual, err := EncodeValueNamed(val, chain)
-	assert.NoError(t, err, "Encoding should succeed for two named packed tuples")
+	require.NoError(t, err, "Encoding should succeed for two named packed tuples")
 
 	fmt.Println("Encoded Named:", actual)
 
@@ -1199,18 +1227,18 @@ func TestSchemeMultiCheckNamesScheme(t *testing.T) {
 
 	// Validate
 	err := ValidateBuffer(actual, chain)
-	assert.NoError(t, err, "Validation should succeed for packed structure")
+	require.NoError(t, err, "Validation should succeed for packed structure")
 
 	// Decode
 	ret, err := DecodeBuffer(actual, chain)
-	assert.NoError(t, err, "Decoding should succeed for packed structure")
+	require.NoError(t, err, "Decoding should succeed for packed structure")
 
 	// Expected slice of selected names
 	expected := []string{"read", "execute"}
 
 	// Assert type and values
 	selected, ok := ret.([]string)
-	assert.True(t, ok, "decoded value should be []string")
+	require.True(t, ok, "decoded value should be []string")
 	assert.ElementsMatch(t, expected, selected, "selected names should match expected")
 }
 
@@ -1223,14 +1251,55 @@ func TestSchemeMultiCheckNamesScheme_Encode(t *testing.T) {
 	// Encode []string{"write"} → should produce tuple [false,true,false]
 	val := []string{"write"}
 	encoded, err := EncodeValue(val, chain)
-	assert.NoError(t, err, "Encoding should succeed")
+	require.NoError(t, err, "Encoding should succeed")
 
 	// Decode back
 	decoded, err := DecodeBuffer(encoded, chain)
-	assert.NoError(t, err, "Decoding should succeed")
+	require.NoError(t, err, "Decoding should succeed")
 
 	expected := []string{"write"}
 	selected, ok := decoded.([]string)
-	assert.True(t, ok, "decoded value should be []string")
+	require.True(t, ok, "decoded value should be []string")
 	assert.ElementsMatch(t, expected, selected, "round-trip should preserve selected names")
+}
+
+func TestSDate_SuccessAndNullable(t *testing.T) {
+	// Define a valid range
+	from := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2030, 12, 31, 23, 59, 59, 0, time.UTC)
+
+	// Build scheme
+	dateScheme := SChain(SDate(true, from, to))
+
+	// Case 1: valid date inside range
+	validDate := time.Date(2025, 9, 10, 0, 0, 0, 0, time.UTC)
+	actual := pack.Pack(pack.PackInt64(validDate.Unix()))
+
+	err := ValidateBuffer(actual, dateScheme)
+	require.NoError(t, err, "Validation should succeed for date within range")
+
+	decoded, err := DecodeBuffer(actual, dateScheme)
+	require.NoError(t, err)
+	tt, ok := decoded.(time.Time)
+	require.True(t, ok, "Decoded value should be time.Time")
+	assert.Equal(t, validDate.UTC(), tt)
+
+	// Case 2: nullable (nil payload)
+	actualNil := pack.Pack(pack.PackNullableInt64(nil))
+	err = ValidateBuffer(actualNil, dateScheme)
+	require.NoError(t, err, "Validation should succeed for nil payload")
+
+	decodedNil, err := DecodeBuffer(actualNil, dateScheme)
+	require.NoError(t, err)
+	require.Nil(t, decodedNil, "Decoded value should be nil for nullable payload")
+
+	// Case 3: out-of-range date
+	invalidDate := time.Date(2050, 1, 1, 0, 0, 0, 0, time.UTC)
+	actualInvalid := pack.Pack(pack.PackInt64(invalidDate.Unix()))
+	err = ValidateBuffer(actualInvalid, dateScheme)
+	require.Error(t, err, "Validation should fail for out-of-range date")
+
+	decodedInvalid, err := DecodeBuffer(actualInvalid, dateScheme)
+	require.Error(t, err, "Decode should fail for out-of-range date")
+	require.Nil(t, decodedInvalid)
 }

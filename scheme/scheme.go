@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/mail"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -28,6 +30,8 @@ const (
 	ErrStringSuffix   // suffix check failed
 	ErrStringPattern  // regex/pattern check failed
 	ErrStringMatch    // exact match failed
+	ErrStringEmail    // email format validation failed
+	ErrStringURL      // URL/URI format validation failed
 
 	// Numeric validation codes
 	ErrOutOfRange     // integer value out of allowed range
@@ -57,6 +61,10 @@ func (e ErrorCode) String() string {
 		return "ErrStringPattern"
 	case ErrStringMatch:
 		return "ErrStringMatch"
+	case ErrStringEmail:
+		return "ErrStringEmail"
+	case ErrStringURL:
+		return "ErrStringURL"
 	case ErrOutOfRange:
 		return "ErrOutOfRange"
 	case ErrDateOutOfRange:
@@ -155,6 +163,8 @@ const (
 	SchemeNamedChainName             = "SchemeNamedChain"
 	SchemeMapUnorderedName           = "SchemeMapUnordered"
 	SchemeMultiCheckNamesSchemeNamed = "SchemeMultiCheckNamesSchemeNamed"
+	SchemeDateName                   = "SchemeDate"
+	SchemeEnumNamedListName          = "SchemeEnumNamedList"
 	ChainName                        = "SchemeChain"
 
 	TupleSchemeName      = "TupleScheme"
@@ -523,8 +533,8 @@ type Nullable interface {
 	IsNullable() bool
 }
 
-func (s SchemeString) IsNullable() bool { return s.Width <= 0 }
-func (s SchemeBytes) IsNullable() bool  { return s.Width <= 0 }
+func (s SchemeString) IsNullable() bool { return s.Width < 0 }
+func (s SchemeBytes) IsNullable() bool  { return s.Width < 0 }
 func (s SchemeMap) IsNullable() bool    { return s.Width <= 0 }
 
 // Primitives
@@ -782,7 +792,7 @@ var (
 	SNullInt64   Scheme       = SchemeInt64{Nullable: true}
 	SNullFloat32 Scheme       = SchemeFloat32{Nullable: true}
 	SNullFloat64 Scheme       = SchemeFloat64{Nullable: true}
-	SString      SchemeString = SchemeString{Width: -1}
+	SString      SchemeString = SchemeString{Width: 0}
 	SAny                      = SchemeAny{}
 )
 
@@ -932,11 +942,8 @@ func precheck(errorName string, pos int, seq *access.SeqGetAccess, tag types.Typ
 		return 0, NewSchemeError(ErrConstraintViolated, errorName, "", pos, ErrTypeMisMatch)
 	}
 
-	if hint >= 0 && width != hint {
-		if !(nullable && (hint == 0 || hint == -1 || width == 0)) {
-			// Width mismatch
-			return 0, NewSchemeError(ErrConstraintViolated, errorName, "", pos, SizeExact{hint, width})
-		}
+	if !nullable && hint != 0 && width != hint {
+		return 0, NewSchemeError(ErrConstraintViolated, errorName, "", pos, SizeExact{hint, width})
 	}
 
 	return width, nil
@@ -1011,6 +1018,9 @@ func (s SchemeString) CheckFunc(code ErrorCode, expected string, test func(paylo
 				str = s.DefaultDecodeVal
 			} else {
 				str = string(payload)
+			}
+			if s.IsNullable() && str == "" {
+				return nil
 			}
 			if !test(str) {
 				return NewSchemeError(code, SchemeStringName, "", pos, StringErrorDetails{Actual: str, Expected: expected})
@@ -1988,4 +1998,202 @@ func (s SchemeMultiCheckNamesScheme) Encode(put *access.PutAccess, val any) erro
 		}
 	}
 	return nil
+}
+
+func (s SchemeString) Optional() SchemeString {
+	s.Width = -1
+	return s
+}
+
+func SEmail(optional bool) Scheme {
+	s := SString
+	if optional {
+		s = s.Optional()
+	}
+	return s.CheckFunc(
+		ErrStringEmail,
+		"email",
+		func(payloadStr string) bool {
+			// Use net/mail parser for RFC-compliant syntax check
+			_, err := mail.ParseAddress(payloadStr)
+			return err == nil
+		},
+	)
+}
+
+// SURI adds URI validation + normalization (prepend https:// if missing)
+func SURI(optional bool) Scheme {
+	s := SString
+	if optional {
+		s.Optional()
+	}
+	return s.CheckFunc(
+		ErrStringURL,
+		"URI",
+		func(payloadStr string) bool {
+			// prepend https:// if missing
+			if !strings.HasPrefix(payloadStr, "http://") && !strings.HasPrefix(payloadStr, "https://") {
+				payloadStr = "https://" + payloadStr
+			}
+			parsed, err := url.ParseRequestURI(payloadStr)
+			return err == nil && parsed.Host != ""
+		},
+	)
+}
+
+// SDate constrains an int64 payload to a date range (Unix seconds)
+// and decodes into time.Time.
+func SDate(nullable bool, from, to time.Time) Scheme {
+	min := from.Unix()
+	max := to.Unix()
+
+	return SchemeGeneric{
+		ValidateFunc: func(seq *access.SeqGetAccess) error {
+			pos := seq.CurrentIndex()
+			payload, err := validatePrimitiveAndGetPayload(SchemeDateName, seq, types.TypeInteger, 8, nullable)
+			if err != nil {
+				return err
+			}
+			if payload == nil {
+				return nil // allow nullable
+			}
+			val := int64(binary.LittleEndian.Uint64(payload))
+			if val < min || val > max {
+				return NewSchemeError(ErrDateOutOfRange, SchemeDateName, "", pos,
+					RangeErrorDetails{Min: min, Max: max, Actual: val},
+				)
+			}
+			return nil
+		},
+		DecodeFunc: func(seq *access.SeqGetAccess) (any, error) {
+			pos := seq.CurrentIndex()
+			payload, err := validatePrimitiveAndGetPayload(SchemeDateName, seq, types.TypeInteger, 8, nullable)
+			if err != nil {
+				return nil, err
+			}
+			if payload == nil {
+				return nil, nil // allow nullable
+			}
+			val := int64(binary.LittleEndian.Uint64(payload))
+			if val < min || val > max {
+				return nil, NewSchemeError(ErrDateOutOfRange, SchemeDateName, "", pos,
+					RangeErrorDetails{Min: min, Max: max, Actual: val},
+				)
+			}
+			// decode as time.Time
+			return time.Unix(val, 0).UTC(), nil
+		},
+		EncodeFunc: func(put *access.PutAccess, val any) error {
+			if nullable && val == nil {
+				put.AddNullableInt64(nil)
+				return nil
+			}
+			switch v := val.(type) {
+			case int64:
+				if v < min || v > max {
+					return NewSchemeError(ErrEncode, SchemeDateName, "", -1,
+						RangeErrorDetails{Min: min, Max: max, Actual: v})
+				}
+				put.AddInt64(v)
+			case time.Time:
+				sec := v.Unix()
+				if sec < min || sec > max {
+					return NewSchemeError(ErrEncode, SchemeDateName, "", -1,
+						RangeErrorDetails{Min: min, Max: max, Actual: sec})
+				}
+				put.AddInt64(sec)
+			default:
+				return NewSchemeError(ErrEncode, SchemeDateName, "", -1, ErrTypeMisMatch)
+			}
+			return nil
+		},
+	}
+}
+
+// SchemeEnumNamedList constrains an index to a list of names, encoded in 2 bytes.
+// Perfect for radio groups or select dropdowns.
+type SchemeEnumNamedList struct {
+	FieldNames []string
+	Nullable   bool
+}
+
+func SEnum(fieldNames []string, nullable bool) Scheme {
+	return SchemeEnumNamedList{FieldNames: fieldNames, Nullable: nullable}
+}
+
+func (s SchemeEnumNamedList) IsNullable() bool { return s.Nullable }
+
+func (s SchemeEnumNamedList) Validate(seq *access.SeqGetAccess) error {
+	pos := seq.CurrentIndex()
+	payload, err := validatePrimitiveAndGetPayload(SchemeEnumNamedListName, seq, types.TypeInteger, 2, s.IsNullable())
+	if err != nil {
+		return err
+	}
+	if payload == nil {
+		return nil
+	}
+	idx := int(binary.LittleEndian.Uint16(payload))
+	if idx < 0 || idx >= len(s.FieldNames) {
+		return NewSchemeError(ErrConstraintViolated, SchemeEnumNamedListName, "", pos,
+			SizeExact{Actual: idx, Exact: len(s.FieldNames)})
+	}
+	return nil
+}
+
+func (s SchemeEnumNamedList) Decode(seq *access.SeqGetAccess) (any, error) {
+	payload, err := validatePrimitiveAndGetPayload(SchemeEnumNamedListName, seq, types.TypeInteger, 2, s.IsNullable())
+	if err != nil {
+		return nil, err
+	}
+	if payload == nil {
+		return nil, nil
+	}
+	idx := int(binary.LittleEndian.Uint16(payload))
+	if idx < 0 || idx >= len(s.FieldNames) {
+		return nil, NewSchemeError(ErrConstraintViolated, SchemeEnumNamedListName, "", -1,
+			SizeExact{Actual: idx, Exact: len(s.FieldNames)})
+	}
+	return s.FieldNames[idx], nil // return the name string
+}
+
+func (s SchemeEnumNamedList) Encode(put *access.PutAccess, val any) error {
+	if val == nil && s.Nullable {
+		put.AddNullableInt16(nil)
+		return nil
+	}
+
+	var idx int
+	switch v := val.(type) {
+	case int:
+		idx = v
+	case string:
+		idx = -1
+		for i, name := range s.FieldNames {
+			if name == v {
+				idx = i
+				break
+			}
+		}
+		if idx == -1 {
+			return NewSchemeError(ErrEncode, SchemeEnumNamedListName, "", -1, ErrTypeMisMatch)
+		}
+	default:
+		return NewSchemeError(ErrEncode, SchemeEnumNamedListName, "", -1, ErrTypeMisMatch)
+	}
+
+	if idx < 0 || idx >= len(s.FieldNames) {
+		return NewSchemeError(ErrEncode, SchemeEnumNamedListName, "", -1,
+			SizeExact{Actual: idx, Exact: len(s.FieldNames)})
+	}
+
+	put.AddInt16(int16(idx))
+	return nil
+}
+
+func SColor(nullable bool) Scheme {
+	s := SString
+	if nullable {
+		s = s.Optional()
+	}
+	return s.Pattern(`^#(?:[0-9a-fA-F]{3}){1,2}$`)
 }

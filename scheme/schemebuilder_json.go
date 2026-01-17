@@ -64,15 +64,17 @@ func BuildScheme(js SchemeJSON) Scheme {
 		if js.Nullable {
 			s.Nullable = true
 		}
-		if js.DateFrom != "" && js.DateTo != "" {
-			from, _ := time.Parse(time.RFC3339, js.DateFrom)
-			to, _ := time.Parse(time.RFC3339, js.DateTo)
-			return s.DateRange(from, to)
-		}
 		if js.RangeMin != 0 || js.RangeMax != 0 {
 			return s.Range(js.RangeMin, js.RangeMax)
 		}
 		return s
+	case "date":
+		if js.DateFrom != "" && js.DateTo != "" {
+			from, _ := time.Parse(time.RFC3339, js.DateFrom)
+			to, _ := time.Parse(time.RFC3339, js.DateTo)
+			return SDate(js.Nullable, from, to)
+		}
+		return SDate(js.Nullable, time.Unix(0, 0), time.Unix(1<<63-1, 0))
 	case "float32":
 		if js.Nullable {
 			return SNullFloat32
@@ -85,7 +87,11 @@ func BuildScheme(js SchemeJSON) Scheme {
 		return SFloat64
 	case "string":
 		s := SString
-		if js.Width > 0 {
+
+		if js.Nullable {
+			// Make it optional s.Optional() == s.WithWidth(-1)
+			s = s.Optional()
+		} else if js.Width > 0 {
 			s = s.WithWidth(js.Width)
 		}
 		if js.DecodeDefault != "" {
@@ -104,6 +110,10 @@ func BuildScheme(js SchemeJSON) Scheme {
 			return s.Pattern(js.Pattern)
 		}
 		return s
+	case "email":
+		return SEmail(js.Nullable)
+	case "uri":
+		return SURI(js.Nullable)
 	case "bytes":
 		if js.Width > 0 {
 			return SBytes(js.Width)
@@ -145,10 +155,16 @@ func BuildScheme(js SchemeJSON) Scheme {
 		return SMapUnordered(mapped)
 	case "multicheck":
 		if len(js.FieldNames) > 0 {
-
 			return SMultiCheckNames(js.FieldNames)
 		}
 		return SMultiCheckNames([]string{})
+	case "enum":
+		if len(js.FieldNames) > 0 {
+			return SEnum(js.FieldNames, js.Nullable)
+		}
+		return SEnum([]string{}, js.Nullable)
+	case "color":
+		return SColor(js.Nullable)
 	default:
 		panic("unknown scheme type: " + js.Type)
 	}
