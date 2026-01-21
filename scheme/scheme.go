@@ -13,6 +13,7 @@ import (
 
 	"github.com/quickwritereader/PackOS/access"
 	"github.com/quickwritereader/PackOS/types"
+	"golang.org/x/text/language"
 )
 
 type ErrorCode int
@@ -32,7 +33,7 @@ const (
 	ErrStringMatch    // exact match failed
 	ErrStringEmail    // email format validation failed
 	ErrStringURL      // URL/URI format validation failed
-
+	ErrStringLang     // language tag format validation failed
 	// Numeric validation codes
 	ErrOutOfRange     // integer value out of allowed range
 	ErrDateOutOfRange // timestamp/date value out of allowed range
@@ -65,6 +66,8 @@ func (e ErrorCode) String() string {
 		return "ErrStringEmail"
 	case ErrStringURL:
 		return "ErrStringURL"
+	case ErrStringLang:
+		return "ErrStringLang"
 	case ErrOutOfRange:
 		return "ErrOutOfRange"
 	case ErrDateOutOfRange:
@@ -2036,6 +2039,34 @@ func SURI(optional bool) Scheme {
 			}
 			parsed, err := url.ParseRequestURI(payloadStr)
 			return err == nil && parsed.Host != ""
+		},
+	)
+}
+
+// SLang validates language codes using golang.org/x/text/language
+func SLang(optional bool) Scheme {
+	s := SString
+	if optional {
+		s.Optional()
+	}
+	return s.CheckFunc(
+		ErrStringLang, // define your own error type similar to ErrStringURL
+		"Language Code",
+		func(payloadStr string) bool {
+			payloadStr = strings.TrimSpace(payloadStr)
+			if len(payloadStr) != 2 {
+				return false
+			}
+
+			// Try parsing with x/text/language
+			tag, err := language.Parse(payloadStr)
+			if err != nil {
+				return false
+			}
+
+			_, conf := tag.Base()
+			return conf != language.No
+
 		},
 	)
 }
