@@ -1218,11 +1218,7 @@ func TestSchemeMultiCheckNamesScheme(t *testing.T) {
 
 	// Pack a tuple of bools: read=true, write=false, execute=true
 	actual := pack.Pack(
-		pack.PackTuple(
-			pack.PackBool(true),
-			pack.PackBool(false),
-			pack.PackBool(true),
-		),
+		pack.PackFlags(true, false, true),
 	)
 
 	// Validate

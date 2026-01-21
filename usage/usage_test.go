@@ -295,42 +295,91 @@ func TestDefaultHugoConfigRoundTrip(t *testing.T) {
 func TestDefaultHugoConfigRoundTripMultiCheck(t *testing.T) {
 
 	SchemeJsonStr := `
-	{"type":"tuple","variableLength":true,"fieldNames":["baseURL","languageCode","title","theme",
-	"paginate","permalinks","outputs","menus"],"schema":[{"type":"string","pattern":"^(https?://.*|/)$"},
-	{"type":"string"},{"type":"string"},{"type":"string"},{"type":"int32","min":1},{"type":"tuple",
-	"fieldNames":["blog"],"schema":[{"type":"string","pattern":"^/blog/"}]},
-	{
-	"type": "tuple",
-	"fieldNames": ["home", "section", "page", "taxonomy", "term"],
-	"schema": [
-		{ "type": "multicheck", "fieldNames": ["HTML", "RSS", "JSON", "AMP"] },
-		{ "type": "multicheck", "fieldNames": ["HTML", "RSS", "JSON", "AMP"] },
-		{ "type": "multicheck", "fieldNames": ["HTML", "RSS", "JSON", "AMP"] },
-		{ "type": "multicheck", "fieldNames": ["HTML", "RSS", "JSON", "AMP"] },
-		{ "type": "multicheck", "fieldNames": ["HTML", "RSS", "JSON", "AMP"] }
-	]
-	},
-	{"type":"tuple","fieldNames":["main"],"flatten":false,"variableLength":true,"schema":[{"type":"repeat",
-	"min":1,"max":1024,"schema":[{"type":"tuple","fieldNames":["identifier","name","url","weight"],
-	"schema":[{"type":"string"},{"type":"string"},{"type":"string"},{"type":"int32","min":1}]}]}]}]}
+		{
+		"type": "tuple",
+		"variableLength": true,
+		"fieldNames": [
+			"baseURL","title","theme","paginate","permalinks",
+			"outputs","menus","defaultContentLanguage",
+			"defaultContentLanguageInSubdir","languages"
+		],
+		"schema": [
+			{ "type": "string", "pattern": "^(https?://.*|/)$" },
+			{ "type": "string" },
+			{ "type": "string" },
+			{ "type": "int32", "min": 1 },
+			{ "type": "tuple", "fieldNames": ["blog"], "schema": [
+			{ "type": "string", "pattern": "^/blog/" }
+			]},
+			{ "type": "tuple", "fieldNames": ["home","section","page","taxonomy","term"], "schema": [
+			{ "type": "multicheck", "fieldNames": ["HTML","RSS","JSON","AMP"] },
+			{ "type": "multicheck", "fieldNames": ["HTML","RSS","JSON","AMP"] },
+			{ "type": "multicheck", "fieldNames": ["HTML","RSS","JSON","AMP"] },
+			{ "type": "multicheck", "fieldNames": ["HTML","RSS","JSON","AMP"] },
+			{ "type": "multicheck", "fieldNames": ["HTML","RSS","JSON","AMP"] }
+			]},
+			{ "type": "tuple", "fieldNames": ["main"], "variableLength": true, "schema": [
+			{ "type": "repeat", "min": 1, "max": 1024, "schema": [
+				{ "type": "tuple", "fieldNames": ["identifier","name","url","weight"], "schema": [
+				{ "type": "string" },
+				{ "type": "string" },
+				{ "type": "string" },
+				{ "type": "int32", "min": 1 }
+				]}
+			]}
+			]},
+			{ "type": "string" },
+			{ "type": "bool" },
+			{ "type": "mapRepeat", "min": 1, "max": -1, "schema": [
+			{ "type": "string" },
+			{ "type": "tuple", "fieldNames": ["languageName","languageCode","contentDir","weight"], "schema": [
+				{ "type": "string" },
+				{ "type": "string" },
+				{ "type": "string" },
+				{ "type": "int32", "min": 1 }
+			]}
+			]}
+		]
+		}
 	`
 	// A minimal but valid Hugo config JSON
 	configJSON := `{
-		"baseURL": "/",
-		"languageCode": "en-us",
+		"baseURL": "https://example.com/",
 		"title": "My Hugo Site",
 		"theme": "ananke",
 		"paginate": 10,
+		"defaultContentLanguage": "en",
+		"defaultContentLanguageInSubdir": true,
+		"languages": {
+			"en": {
+				"languageName": "English",
+				"languageCode": "en-us",
+				"contentDir": "content/en",
+				"weight": 1
+			},
+			"fr": {
+				"languageName": "Français",
+				"languageCode": "fr-fr",
+				"contentDir": "content/fr",
+				"weight": 2
+			},
+			"ru": {
+				"languageName": "Русский",
+				"languageCode": "ru-ru",
+				"contentDir": "content/ru",
+				"weight": 3
+			}
+		},
 		"permalinks": {
 			"blog": "/blog/:slug/"
 		},
 		"outputs": {
 			"home": ["HTML", "RSS", "JSON", "AMP"],
 			"section": ["HTML", "RSS", "JSON"],
-			"page": ["HTML",  "JSON","AMP"],
+			"page": ["HTML", "JSON", "AMP"],
 			"taxonomy": ["HTML", "RSS"],
 			"term": ["HTML", "RSS", "JSON"]
-		}, 
+		},
 		"menus": {
 			"main": [
 				{"identifier":"home","name":"Home","url":"/","weight":1},

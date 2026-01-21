@@ -1,6 +1,9 @@
 package scheme
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type SchemeJSON struct {
 	Type           string       `json:"type"`
@@ -153,6 +156,12 @@ func BuildScheme(js SchemeJSON) Scheme {
 			return SMapUnorderedOptional(mapped)
 		}
 		return SMapUnordered(mapped)
+	case "mapRepeat":
+		if len(js.Schema) == 2 {
+			return SMapRepeatRange(BuildScheme(js.Schema[0]), BuildScheme(js.Schema[1]), js.Min, js.Max)
+		} else {
+			panic(fmt.Sprintf("should be 2 schemes %v", len(js.FieldNames)))
+		}
 	case "multicheck":
 		if len(js.FieldNames) > 0 {
 			return SMultiCheckNames(js.FieldNames)
