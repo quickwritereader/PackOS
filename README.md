@@ -1,25 +1,34 @@
-# PackOS
-PackOS is a binary packing protocol with offset-indexed framing, designed for fast composition, random access, and reliable for  RPC or BadgerDB workloads with **small blobs(<8kb)**(the size limitation maybe lifted to make it suitable for all purpose) 
-It supports:
-All packing paths emit canonical headers, preserve offset domains, and support recursive structures. PAOSP ensures schema validation, GC neutrality, and reproducible output across variants.
+# PackOS 
 
-- [x] Canonical encoding
-Emits offset-indexed binary frames with consistent headers and type tags.
-- [x] Sequential decoding
-Supports single-pass traversal with offset tracking and teardown-safe accessors.
-- [x] Random access decoding
-Enables direct lookup via offset domains without full unpacking.
-- [x] Recursive structure support
-Handles nested maps, slices, and tagged frames with offset provenance.
-- [x] Simple schema validation
-Validates type tags, offsets, and structure boundaries during decode.
-- [x] GC neutrality
-Avoids retained slices and ensures allocation discipline across packing paths.
-- [x] Reproducible output
-Guarantees stable binary layout across runs and variants.
-- [ ] General-purpose container support
-Supports arbitrarily large maps, slices, and tagged frames without size limits.
-- [ ] Generate big and nested complex structures above 8kb limit
+PackOS is a binary packing protocol with offset-indexed framing.  
+It provides fast composition, random access, and reliable use in RPC or BadgerDB workloads with **small blobs (<8 KB)**.  
+Future versions may lift the size limit for general-purpose use.
+
+## Features
+- [x] **Canonical encoding**  
+  Offset-indexed binary frames with consistent headers and type tags  
+
+- [x] **Sequential decoding**  
+  Single-pass traversal with offset tracking and safe accessors  
+
+- [x] **Random access decoding**  
+  Direct lookup via offset domains; nested elements accessed by header first, then inner offsets  
+
+- [x] **Recursive structure support**  
+  Nested maps and tuples  
+
+- [x] **Schema-based validation, encoding, and decoding**  
+  Validates type tags, offsets, and structure boundaries during decode and encode  
+  Packs compactly by stripping field names  
+
+- [x] **Reproducible output**  
+  Stable binary layout across runs and variants  
+
+- [ ] **General-purpose container support**  
+  Arbitrarily large maps, slices, and tagged frames without size limits  
+
+- [ ] **Large structure generation**  
+  Big and nested complex structures above the 8 KB limit  
 
 
 ## Encoding Example
