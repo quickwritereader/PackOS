@@ -1,4 +1,4 @@
-# PackOS 
+use# PackOS 
 
 PackOS is a binary packing protocol with offset-indexed framing.  
 It provides fast composition, random access, and reliable use in RPC or BadgerDB workloads with **small blobs (<8 KB)**.  
@@ -422,5 +422,134 @@ STuple(
 ),
 )
 
+```
+
+### Convert, validate Json to packos with Scheme and decode back 
+
+```go
+func TestDefaultHugoConfigRoundTripMultiCheck(t *testing.T) {
+
+	SchemeJsonStr := `
+		{
+		"type": "tuple",
+		"variableLength": true,
+		"fieldNames": [
+			"baseURL","title","theme","paginate","permalinks",
+			"outputs","menus","defaultContentLanguage",
+			"defaultContentLanguageInSubdir","languages"
+		],
+		"schema": [
+			{ "type": "string", "pattern": "^(https?://.*|/)$" },
+			{ "type": "string" },
+			{ "type": "string" },
+			{ "type": "int32", "min": 1 },
+			{ "type": "tuple", "fieldNames": ["blog"], "schema": [
+			{ "type": "string", "pattern": "^/blog/" }
+			]},
+			{ "type": "tuple", "fieldNames": ["home","section","page","taxonomy","term"], "schema": [
+			{ "type": "multicheck", "fieldNames": ["HTML","RSS","JSON","AMP"] },
+			{ "type": "multicheck", "fieldNames": ["HTML","RSS","JSON","AMP"] },
+			{ "type": "multicheck", "fieldNames": ["HTML","RSS","JSON","AMP"] },
+			{ "type": "multicheck", "fieldNames": ["HTML","RSS","JSON","AMP"] },
+			{ "type": "multicheck", "fieldNames": ["HTML","RSS","JSON","AMP"] }
+			]},
+			{ "type": "tuple", "fieldNames": ["main"], "variableLength": true, "schema": [
+			{ "type": "repeat", "min": 1, "max": 1024, "schema": [
+				{ "type": "tuple", "fieldNames": ["identifier","name","url","weight"], "schema": [
+				{ "type": "string" },
+				{ "type": "string" },
+				{ "type": "string" },
+				{ "type": "int32", "min": 1 }
+				]}
+			]}
+			]},
+			{ "type": "string" },
+			{ "type": "bool" },
+			{ "type": "mapRepeat", "min": 1, "max": -1, "schema": [
+			{ "type": "string" },
+			{ "type": "tuple", "fieldNames": ["languageName","languageCode","contentDir","weight"], "schema": [
+				{ "type": "string" },
+				{ "type": "string" },
+				{ "type": "string" },
+				{ "type": "int32", "min": 1 }
+			]}
+			]}
+		]
+		}
+	`
+	// A minimal but valid Hugo config JSON
+	configJSON := `{
+		"baseURL": "https://example.com/",
+		"title": "My Hugo Site",
+		"theme": "ananke",
+		"paginate": 10,
+		"defaultContentLanguage": "en",
+		"defaultContentLanguageInSubdir": true,
+		"languages": {
+			"en": {
+				"languageName": "English",
+				"languageCode": "en-us",
+				"contentDir": "content/en",
+				"weight": 1
+			},
+			"fr": {
+				"languageName": "Français",
+				"languageCode": "fr-fr",
+				"contentDir": "content/fr",
+				"weight": 2
+			},
+			"ru": {
+				"languageName": "Русский",
+				"languageCode": "ru-ru",
+				"contentDir": "content/ru",
+				"weight": 3
+			}
+		},
+		"permalinks": {
+			"blog": "/blog/:slug/"
+		},
+		"outputs": {
+			"home": ["HTML", "RSS", "JSON", "AMP"],
+			"section": ["HTML", "RSS", "JSON"],
+			"page": ["HTML", "JSON", "AMP"],
+			"taxonomy": ["HTML", "RSS"],
+			"term": ["HTML", "RSS", "JSON"]
+		},
+		"menus": {
+			"main": [
+				{"identifier":"home","name":"Home","url":"/","weight":1},
+				{"identifier":"blog","name":"Blog","url":"/blog/","weight":2}
+			]
+		}
+	}`
+
+	var SchemeJson SchemeJSON
+	require.NoError(t, json.Unmarshal([]byte(SchemeJsonStr), &SchemeJson), "failed to unmarshal config")
+
+	schain := scheme.SChain(scheme.BuildScheme(SchemeJson))
+
+	// Decode into generic map
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal([]byte(configJSON), &decoded), "failed to unmarshal config")
+
+	// Encode using your scheme
+	encoded, err := scheme.EncodeValue(decoded, schain)
+	require.NoError(t, err, "scheme encode failed")
+
+	// Decode back using your scheme
+	roundTrip, err := scheme.DecodeBuffer(encoded, schain)
+	require.NoError(t, err, "scheme decode failed")
+
+	// Marshal both original and round-trip to canonical JSON
+	origJSON, err := json.Marshal(decoded)
+	require.NoError(t, err, "failed to marshal original")
+
+	roundTripJSON, err := json.Marshal(roundTrip)
+	require.NoError(t, err, "failed to marshal roundTrip")
+
+	// Compare the JSON strings
+	assert.JSONEq(t, string(origJSON), string(roundTripJSON), "round-trip mismatch")
+
+}
 ```
 
