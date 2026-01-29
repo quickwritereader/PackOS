@@ -1832,7 +1832,7 @@ func (s TupleSchemaNamed) Encode(put *access.PutAccess, val any) error {
 					}
 				} else if s.Schemas[i].IsNullable() {
 					//just add null tag and skip
-					s.Schemas[i].Encode(put, nil)
+					s.Schemas[i].Encode(nested, nil)
 				} else {
 					return NewSchemaError(ErrInvalidFormat, TupleSchemaNamedName, "", -1, MissingKeyErrorDetails{Key: key})
 				}
