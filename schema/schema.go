@@ -414,7 +414,7 @@ func (s SchemaMap) Decode(seq *access.SeqGetAccess) (any, error) {
 
 // Encode writes an OrderedMapAny into the sequence according to the SchemaMap.
 func (s SchemaMap) Encode(put *access.PutAccess, val any) error {
-	if s.IsNullable() && val == nil && len(s.Schemas) < 1 {
+	if s.IsNullable() && val == nil || len(s.Schemas) < 1 {
 		put.AddMapAny(nil, true)
 		return nil
 	}
@@ -1393,7 +1393,7 @@ func (s SchemaMapUnordered) IsNullable() bool {
 
 func (s SchemaMapUnordered) Validate(seq *access.SeqGetAccess) error {
 	pos := seq.CurrentIndex()
-	typ, _, err := seq.PeekTypeWidth()
+	typ, w, err := seq.PeekTypeWidth()
 	if err != nil {
 		return NewSchemaError(ErrInvalidFormat, SchemaMapUnorderedName, "", pos, err)
 	}
@@ -1401,7 +1401,7 @@ func (s SchemaMapUnordered) Validate(seq *access.SeqGetAccess) error {
 		return NewSchemaError(ErrConstraintViolated, SchemaMapUnorderedName, "", pos, ErrUnsupportedType)
 	}
 
-	if len(s.Fields) > 0 {
+	if w != 0 && len(s.Fields) > 0 {
 		subseq, err := seq.PeekNestedSeq()
 		if err != nil {
 			return NewSchemaError(ErrInvalidFormat, SchemaMapUnorderedName, "", pos, err)
@@ -1452,7 +1452,7 @@ func (s SchemaMapUnordered) Validate(seq *access.SeqGetAccess) error {
 
 func (s SchemaMapUnordered) Decode(seq *access.SeqGetAccess) (any, error) {
 	pos := seq.CurrentIndex()
-	typ, _, err := seq.PeekTypeWidth()
+	typ, w, err := seq.PeekTypeWidth()
 	if err != nil {
 		return nil, NewSchemaError(ErrInvalidFormat, SchemaMapUnorderedName, "", pos, err)
 	}
@@ -1461,7 +1461,7 @@ func (s SchemaMapUnordered) Decode(seq *access.SeqGetAccess) (any, error) {
 	}
 
 	var out map[string]any
-	if len(s.Fields) > 0 {
+	if w != 0 && len(s.Fields) > 0 {
 		subseq, err := seq.PeekNestedSeq()
 		if err != nil {
 			return nil, NewSchemaError(ErrInvalidFormat, SchemaMapUnorderedName, "", pos, err)
@@ -1505,6 +1505,9 @@ func (s SchemaMapUnordered) Decode(seq *access.SeqGetAccess) (any, error) {
 
 	if err := seq.Advance(); err != nil {
 		return nil, NewSchemaError(ErrUnexpectedEOF, SchemaMapUnorderedName, "", pos, err)
+	}
+	if out == nil {
+		return nil, nil
 	}
 	return out, nil
 }
@@ -1563,18 +1566,18 @@ func (s TupleSchema) IsNullable() bool {
 
 func (s TupleSchema) Validate(seq *access.SeqGetAccess) error {
 	pos := seq.CurrentIndex()
-	_, err := precheck(TupleSchemaName, pos, seq, typetags.TypeTuple, -1, s.IsNullable())
+	w, err := precheck(TupleSchemaName, pos, seq, typetags.TypeTuple, -1, s.IsNullable())
 	if err != nil {
 		return err
 	}
-	w := len(s.Schemas)
+	argCount := len(s.Schemas)
 	if w != 0 {
 		sub, err := seq.PeekNestedSeq()
 		if err != nil {
 			return NewSchemaError(ErrInvalidFormat, TupleSchemaName, "", pos, err)
 		}
-		if w > 0 && sub.ArgCount() != w && !s.VariableLength {
-			return NewSchemaError(ErrConstraintViolated, TupleSchemaName, "", pos, SizeExact{Actual: w, Exact: sub.ArgCount()})
+		if argCount > 0 && sub.ArgCount() != argCount && !s.VariableLength {
+			return NewSchemaError(ErrConstraintViolated, TupleSchemaName, "", pos, SizeExact{Actual: argCount, Exact: sub.ArgCount()})
 		}
 		for _, sch := range s.Schemas {
 			if err := sch.Validate(sub); err != nil {
@@ -1590,19 +1593,19 @@ func (s TupleSchema) Validate(seq *access.SeqGetAccess) error {
 
 func (s TupleSchema) Decode(seq *access.SeqGetAccess) (any, error) {
 	pos := seq.CurrentIndex()
-	_, err := precheck(TupleSchemaName, pos, seq, typetags.TypeTuple, -1, s.IsNullable())
+	w, err := precheck(TupleSchemaName, pos, seq, typetags.TypeTuple, -1, s.IsNullable())
 	if err != nil {
 		return nil, err
 	}
 	var out []any
-	w := len(s.Schemas)
+	argCount := len(s.Schemas)
 	if w != 0 {
 		sub, err := seq.PeekNestedSeq()
 		if err != nil {
 			return nil, NewSchemaError(ErrInvalidFormat, TupleSchemaName, "", pos, err)
 		}
-		if w > 0 && sub.ArgCount() != w && !s.VariableLength {
-			return nil, NewSchemaError(ErrConstraintViolated, TupleSchemaName, "", pos, SizeExact{Actual: w, Exact: sub.ArgCount()})
+		if argCount > 0 && sub.ArgCount() != argCount && !s.VariableLength {
+			return nil, NewSchemaError(ErrConstraintViolated, TupleSchemaName, "", pos, SizeExact{Actual: argCount, Exact: sub.ArgCount()})
 		}
 		out = make([]any, 0, sub.ArgCount())
 		for _, sch := range s.Schemas {
@@ -1623,6 +1626,9 @@ func (s TupleSchema) Decode(seq *access.SeqGetAccess) (any, error) {
 	}
 	if err := seq.Advance(); err != nil {
 		return nil, NewSchemaError(ErrUnexpectedEOF, TupleSchemaName, "", pos, err)
+	}
+	if out == nil {
+		return nil, nil
 	}
 	return out, nil
 }
@@ -1721,18 +1727,18 @@ func (s TupleSchemaNamed) Validate(seq *access.SeqGetAccess) error {
 		return NewSchemaError(ErrConstraintViolated, TupleSchemaNamedName, "", 0, SizeExact{Actual: len(s.FieldNames), Exact: len(s.Schemas)})
 	}
 	pos := seq.CurrentIndex()
-	_, err := precheck(TupleSchemaNamedName, pos, seq, typetags.TypeTuple, -1, s.IsNullable())
+	w, err := precheck(TupleSchemaNamedName, pos, seq, typetags.TypeTuple, -1, s.IsNullable())
 	if err != nil {
 		return err
 	}
-	w := len(s.Schemas)
+	argCount := len(s.Schemas)
 	if w != 0 {
 		sub, err := seq.PeekNestedSeq()
 		if err != nil {
 			return NewSchemaError(ErrInvalidFormat, TupleSchemaNamedName, "", pos, err)
 		}
-		if w > 0 && sub.ArgCount() != w {
-			return NewSchemaError(ErrConstraintViolated, TupleSchemaNamedName, "", pos, SizeExact{Actual: w, Exact: sub.ArgCount()})
+		if !s.VariableLength && sub.ArgCount() != argCount {
+			return NewSchemaError(ErrConstraintViolated, TupleSchemaNamedName, "", pos, SizeExact{Actual: argCount, Exact: sub.ArgCount()})
 		}
 		for _, sch := range s.Schemas {
 			if err := sch.Validate(sub); err != nil {
@@ -1751,20 +1757,21 @@ func (s TupleSchemaNamed) Decode(seq *access.SeqGetAccess) (any, error) {
 		return nil, NewSchemaError(ErrConstraintViolated, TupleSchemaNamedName, "", 0, SizeExact{Actual: len(s.FieldNames), Exact: len(s.Schemas)})
 	}
 	pos := seq.CurrentIndex()
-	_, err := precheck(TupleSchemaNamedName, pos, seq, typetags.TypeTuple, -1, s.IsNullable())
+	w, err := precheck(TupleSchemaNamedName, pos, seq, typetags.TypeTuple, -1, s.IsNullable())
 	if err != nil {
 		return nil, err
 	}
 
-	out := make(map[string]any)
-	w := len(s.Schemas)
-	if w > 0 {
+	var out map[string]any = nil
+	argCount := len(s.Schemas)
+	if w != 0 {
+		out = make(map[string]any, argCount)
 		sub, err := seq.PeekNestedSeq()
 		if err != nil {
 			return nil, NewSchemaError(ErrInvalidFormat, TupleSchemaNamedName, "", pos, err)
 		}
-		if !s.VariableLength && sub.ArgCount() != w {
-			return nil, NewSchemaError(ErrConstraintViolated, TupleSchemaNamedName, "", pos, SizeExact{Actual: w, Exact: sub.ArgCount()})
+		if !s.VariableLength && sub.ArgCount() != argCount {
+			return nil, NewSchemaError(ErrConstraintViolated, TupleSchemaNamedName, "", pos, SizeExact{Actual: argCount, Exact: sub.ArgCount()})
 		}
 		for i, sch := range s.Schemas {
 			v, err := sch.Decode(sub)
@@ -1786,6 +1793,9 @@ func (s TupleSchemaNamed) Decode(seq *access.SeqGetAccess) (any, error) {
 	}
 	if err := seq.Advance(); err != nil {
 		return nil, NewSchemaError(ErrUnexpectedEOF, TupleSchemaNamedName, "", pos, err)
+	}
+	if out == nil {
+		return nil, nil
 	}
 	return out, nil
 }
@@ -2364,34 +2374,34 @@ func (s SchemaMapRepeat) Validate(seq *access.SeqGetAccess) error {
 	if err != nil {
 		return err
 	}
-	if w == 0 && s.IsNullable() {
-		return nil
-	}
-	subseq, err := seq.PeekNestedSeq()
-	if err != nil {
-		return NewSchemaError(ErrInvalidFormat, SchemaMapRepeatName, "", pos, err)
-	}
-	pairCount := subseq.ArgCount() / 2
-	maxIter := pairCount
-	if s.max != -1 && s.max < pairCount {
-		maxIter = s.max
-	}
-	if s.min != -1 && pairCount < s.min {
-		return NewSchemaError(ErrConstraintViolated, SchemaMapRepeatName, "", pos,
-			RangeErrorDetails[int64]{
-				Min:    PtrToInt64(s.min),
-				Max:    PtrToInt64(s.max),
-				Actual: int64(pairCount),
-			})
-	}
+	if w != 0 {
 
-	for i := 0; i < maxIter; i++ {
-
-		if err := s.Key.Validate(subseq); err != nil {
+		subseq, err := seq.PeekNestedSeq()
+		if err != nil {
 			return NewSchemaError(ErrInvalidFormat, SchemaMapRepeatName, "", pos, err)
 		}
-		if err := s.Value.Validate(subseq); err != nil {
-			return NewSchemaError(ErrInvalidFormat, SchemaMapRepeatName, "", pos, err)
+		pairCount := subseq.ArgCount() / 2
+		maxIter := pairCount
+		if s.max != -1 && s.max < pairCount {
+			maxIter = s.max
+		}
+		if s.min != -1 && pairCount < s.min {
+			return NewSchemaError(ErrConstraintViolated, SchemaMapRepeatName, "", pos,
+				RangeErrorDetails[int64]{
+					Min:    PtrToInt64(s.min),
+					Max:    PtrToInt64(s.max),
+					Actual: int64(pairCount),
+				})
+		}
+
+		for i := 0; i < maxIter; i++ {
+
+			if err := s.Key.Validate(subseq); err != nil {
+				return NewSchemaError(ErrInvalidFormat, SchemaMapRepeatName, "", pos, err)
+			}
+			if err := s.Value.Validate(subseq); err != nil {
+				return NewSchemaError(ErrInvalidFormat, SchemaMapRepeatName, "", pos, err)
+			}
 		}
 	}
 
@@ -2407,45 +2417,47 @@ func (s SchemaMapRepeat) Decode(seq *access.SeqGetAccess) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if w == 0 && s.IsNullable() {
-		return nil, nil
-	}
-	subseq, err := seq.PeekNestedSeq()
-	if err != nil {
-		return nil, NewSchemaError(ErrInvalidFormat, SchemaMapRepeatName, "", pos, err)
-	}
-	pairCount := subseq.ArgCount() / 2
-	maxIter := pairCount
-	if s.max != -1 && s.max < pairCount {
-		maxIter = s.max
-	}
-	if s.min != -1 && pairCount < s.min {
-		return nil, NewSchemaError(ErrConstraintViolated, SchemaMapRepeatName, "", pos,
-			RangeErrorDetails[int64]{
-				Min:    PtrToInt64(s.min),
-				Max:    PtrToInt64(s.max),
-				Actual: int64(pairCount),
-			})
-	}
-	out := make(map[string]any)
-	for i := 0; i < maxIter; i++ {
-		k, err := s.Key.Decode(subseq)
+	var out map[string]any = nil
+	if w != 0 {
+		subseq, err := seq.PeekNestedSeq()
 		if err != nil {
 			return nil, NewSchemaError(ErrInvalidFormat, SchemaMapRepeatName, "", pos, err)
 		}
-		v, err := s.Value.Decode(subseq)
-		if err != nil {
-			return nil, NewSchemaError(ErrInvalidFormat, SchemaMapRepeatName, "", pos, err)
+		pairCount := subseq.ArgCount() / 2
+		maxIter := pairCount
+		if s.max != -1 && s.max < pairCount {
+			maxIter = s.max
 		}
-		if keyStr, ok := k.(string); ok {
-			out[keyStr] = v
-		} else {
-			return nil, NewSchemaError(ErrInvalidFormat, SchemaMapRepeatName, "", pos-1, ErrUnsupportedType)
+		if s.min != -1 && pairCount < s.min {
+			return nil, NewSchemaError(ErrConstraintViolated, SchemaMapRepeatName, "", pos,
+				RangeErrorDetails[int64]{
+					Min:    PtrToInt64(s.min),
+					Max:    PtrToInt64(s.max),
+					Actual: int64(pairCount),
+				})
+		}
+		out = make(map[string]any, pairCount)
+		for i := 0; i < maxIter; i++ {
+			k, err := s.Key.Decode(subseq)
+			if err != nil {
+				return nil, NewSchemaError(ErrInvalidFormat, SchemaMapRepeatName, "", pos, err)
+			}
+			v, err := s.Value.Decode(subseq)
+			if err != nil {
+				return nil, NewSchemaError(ErrInvalidFormat, SchemaMapRepeatName, "", pos, err)
+			}
+			if keyStr, ok := k.(string); ok {
+				out[keyStr] = v
+			} else {
+				return nil, NewSchemaError(ErrInvalidFormat, SchemaMapRepeatName, "", pos-1, ErrUnsupportedType)
+			}
 		}
 	}
-
 	if err := seq.Advance(); err != nil {
 		return nil, NewSchemaError(ErrUnexpectedEOF, SchemaMapRepeatName, "", pos, err)
+	}
+	if out == nil {
+		return nil, nil
 	}
 	return out, nil
 }

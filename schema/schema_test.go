@@ -841,23 +841,31 @@ func TestEncodePackedEmptyTuples2(t *testing.T) {
 		pack.PackInt16(5),
 		pack.PackTuple(),
 		pack.PackTuple(),
+		pack.PackTuple(),
+		pack.PackTuple(),
 		pack.PackInt16(5),
 	)
 
 	chain := SChain(
 		SInt16,
+		STuple(SString, SString, SString),
 		STuple(),
-		STuple(),
+		STupleNamed([]string{"ok"}, SString),
+		STupleNamed(nil),
 		SInt16,
 	)
 
-	val := []any{int16(5), nil, nil, int16(5)}
+	val := []any{int16(5), nil, nil, nil, nil, int16(5)}
 
 	actual, err := EncodeValue(val, chain)
 	if err != nil {
 		t.Log(err)
 	}
-	assert.Equal(t, expected, actual)
+	require.Equal(t, expected, actual)
+
+	decoded, err := DecodeBuffer(actual, chain)
+	require.NoError(t, err)
+	assert.EqualValues(t, val, decoded)
 }
 func TestEncodeDecodePackedEmptyMap(t *testing.T) {
 	expected := pack.Pack(
@@ -868,21 +876,27 @@ func TestEncodeDecodePackedEmptyMap(t *testing.T) {
 		pack.PackMap{},
 		pack.PackMapStrInt32{},
 		pack.PackMapStrInt64{},
+		pack.PackMap{},
+		pack.PackMap{},
+		pack.PackMap{},
 		pack.PackInt16(5),
 	)
 
 	chain := SChain(
 		SInt16,
-		SMap(),
-		SMap(),
-		SMap(),
-		SMap(),
-		SMap(),
-		SMap(),
+		SMap(SString, SString),
+		SMap(SString, SString),
+		SMap(SString, SString),
+		SMap(SString, SString),
+		SMap(SString, SString),
+		SMap(SString, SString),
+		SMapRepeat(SString, SString),
+		SMapRepeat(SString, SString),
+		SMapUnorderedOptional(map[string]Schema{"ok": SString}),
 		SInt16,
 	)
 
-	val := []any{int16(5), nil, nil, nil, nil, nil, nil, int16(5)}
+	val := []any{int16(5), nil, nil, nil, nil, nil, nil, nil, nil, nil, int16(5)}
 
 	actual, err := EncodeValue(val, chain)
 	if err != nil {
