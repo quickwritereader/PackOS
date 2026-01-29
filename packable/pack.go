@@ -2,7 +2,7 @@ package packable
 
 import (
 	"github.com/quickwritereader/PackOS/access"
-	"github.com/quickwritereader/PackOS/types"
+	"github.com/quickwritereader/PackOS/typetags"
 )
 
 type Tuple struct {
@@ -48,7 +48,7 @@ func (p Tuple) Write(buf []byte, pos int) int {
 		// write
 		pos = arg.Write(buf, pos)
 	}
-	_ = access.WriteTypeHeader(buf, posH, pos-delta_start, types.TypeEnd)
+	_ = access.WriteTypeHeader(buf, posH, pos-delta_start, typetags.TypeEnd)
 	return pos
 }
 
@@ -62,8 +62,8 @@ func Pack(args ...access.Packable) []byte {
 	return buffer
 }
 
-func (p Tuple) HeaderType() types.Type {
-	return types.TypeTuple
+func (p Tuple) HeaderType() typetags.Type {
+	return typetags.TypeTuple
 }
 
 func (pack Tuple) PackInto(p *access.PutAccess) {
@@ -72,7 +72,7 @@ func (pack Tuple) PackInto(p *access.PutAccess) {
 	buffer := bPool.Acquire(size)
 	pos := 0
 	pos = pack.Write(buffer, pos)
-	p.AppendTagAndValue(types.TypeTuple, buffer[:pos])
+	p.AppendTagAndValue(typetags.TypeTuple, buffer[:pos])
 	bPool.Release(buffer)
 }
 

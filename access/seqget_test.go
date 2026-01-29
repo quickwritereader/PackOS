@@ -3,7 +3,7 @@ package access
 import (
 	"testing"
 
-	"github.com/quickwritereader/PackOS/types"
+	"github.com/quickwritereader/PackOS/typetags"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -52,14 +52,14 @@ func TestSeqGetAccess_UnpacksNestedMap(t *testing.T) {
 	// Field 0: Int16
 	payload, typ, err := seq.Next()
 	require.NoError(t, err)
-	assert.Equal(t, types.TypeInteger, typ)
+	assert.Equal(t, typetags.TypeInteger, typ)
 	assert.Equal(t, []byte{0x39, 0x30}, payload)
 
 	// Field 1: Map
 	typ, w, err := seq.PeekTypeWidth()
 	require.NoError(t, err)
 	assert.Equal(t, w, 52)
-	assert.Equal(t, types.TypeMap, typ)
+	assert.Equal(t, typetags.TypeMap, typ)
 
 	nested, err := seq.PeekNestedSeq()
 	require.NoError(t, err)
@@ -67,7 +67,7 @@ func TestSeqGetAccess_UnpacksNestedMap(t *testing.T) {
 	// Field 0 in outer map: "meta" → nested map
 	payload, typ, err = nested.Next()
 	require.NoError(t, err)
-	assert.Equal(t, types.TypeString, typ)
+	assert.Equal(t, typetags.TypeString, typ)
 	assert.Equal(t, "meta", string(payload))
 
 	meta, err := nested.PeekNestedSeq()
@@ -76,13 +76,13 @@ func TestSeqGetAccess_UnpacksNestedMap(t *testing.T) {
 	// Validate "role"
 	rolePayload, roleType, err := meta.Next()
 	require.NoError(t, err)
-	assert.Equal(t, types.TypeString, roleType)
+	assert.Equal(t, typetags.TypeString, roleType)
 	assert.Equal(t, "role", string(rolePayload))
 
 	// Validate "admin"
 	adminPayload, adminType, err := meta.Next()
 	require.NoError(t, err)
-	assert.Equal(t, types.TypeString, adminType)
+	assert.Equal(t, typetags.TypeString, adminType)
 	assert.Equal(t, "admin", string(adminPayload))
 
 	// Field 1 in outer map: "name"
@@ -91,12 +91,12 @@ func TestSeqGetAccess_UnpacksNestedMap(t *testing.T) {
 
 	namePayload, nameType, err := nested.Next()
 	require.NoError(t, err)
-	assert.Equal(t, types.TypeString, nameType)
+	assert.Equal(t, typetags.TypeString, nameType)
 	assert.Equal(t, "name", string(namePayload))
 
 	namePayload, nameType, err = nested.Next()
 	require.NoError(t, err)
-	assert.Equal(t, types.TypeString, nameType)
+	assert.Equal(t, typetags.TypeString, nameType)
 	assert.Equal(t, "gopher", string(namePayload))
 }
 
@@ -122,30 +122,30 @@ func TestSeqGetAccess_ExplicitByteMatch(t *testing.T) {
 	// Field 0: Int16
 	payload, typ, err := seq.Next()
 	require.NoError(t, err)
-	assert.Equal(t, types.TypeInteger, typ)
+	assert.Equal(t, typetags.TypeInteger, typ)
 	assert.Equal(t, []byte{0x2A, 0x00}, payload)
 
 	// Field 1: Bool
 	payload, typ, err = seq.Next()
 	require.NoError(t, err)
-	assert.Equal(t, types.TypeBool, typ)
+	assert.Equal(t, typetags.TypeBool, typ)
 	assert.Equal(t, []byte{0x01}, payload)
 
 	// Field 2: String ("go")
 	payload, typ, err = seq.Next()
 	require.NoError(t, err)
-	assert.Equal(t, types.TypeString, typ)
+	assert.Equal(t, typetags.TypeString, typ)
 	assert.Equal(t, "go", string(payload))
 
 	// Field 3: Bytes
 	payload, typ, err = seq.Next()
 	require.NoError(t, err)
-	assert.Equal(t, types.TypeString, typ) // treated as raw string
+	assert.Equal(t, typetags.TypeString, typ) // treated as raw string
 	assert.Equal(t, []byte{0xAA, 0xBB}, payload)
 
 	// Field 4: End
 	_, typ, err = seq.Next()
-	assert.Equal(t, types.TypeEnd, typ)
+	assert.Equal(t, typetags.TypeEnd, typ)
 	require.Error(t, err)
 
 }

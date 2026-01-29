@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/quickwritereader/PackOS/types"
+	"github.com/quickwritereader/PackOS/typetags"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -183,15 +183,15 @@ func TestPutAccess_IntThenMapOrderedAny(t *testing.T) {
 	put.AddInt16(12345) // 2 bytes
 
 	// Build inner ordered map for "meta" using OP helper
-	meta := types.NewOrderedMapAny(
-		types.OPAny("role", []byte("admin")),
-		types.OPAny("user", []byte("alice")),
+	meta := typetags.NewOrderedMapAny(
+		typetags.OPAny("role", []byte("admin")),
+		typetags.OPAny("user", []byte("alice")),
 	)
 
 	// Build outer ordered map
-	outer := types.NewOrderedMapAny(
-		types.OPAny("meta", meta),
-		types.OPAny("name", "gopher"),
+	outer := typetags.NewOrderedMapAny(
+		typetags.OPAny("meta", meta),
+		typetags.OPAny("name", "gopher"),
 	)
 
 	// Add the ordered map

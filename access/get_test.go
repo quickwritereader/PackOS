@@ -3,7 +3,7 @@ package access
 import (
 	"testing"
 
-	"github.com/quickwritereader/PackOS/types"
+	"github.com/quickwritereader/PackOS/typetags"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -78,9 +78,9 @@ func TestGetAccess_MapOrderedAny(t *testing.T) {
 	require.NotNil(t, om)
 
 	// Build expected ordered map
-	expected := types.NewOrderedMapAny(
-		types.OPAny("role", "admin"),
-		types.OPAny("user", "alice"),
+	expected := typetags.NewOrderedMapAny(
+		typetags.OPAny("role", "admin"),
+		typetags.OPAny("user", "alice"),
 	)
 
 	// Use Equal method to compare

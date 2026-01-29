@@ -1,4 +1,4 @@
-package scheme
+package schema
 
 import (
 	"testing"
@@ -6,16 +6,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestBuildScheme_WithRepeatTuples(t *testing.T) {
-	// Define scheme in JSON form
-	schemeJSON := SchemeJSON{
+func TestBuildSchema_WithRepeatTuples(t *testing.T) {
+	// Define schema in JSON form
+	schemaJSON := SchemaJSON{
 		Type: "repeat",
-		Min:  1,
-		Max:  -1,
-		Schema: []SchemeJSON{
+		Min:  PtrToInt64(1),
+		Max:  nil,
+		Schema: []SchemaJSON{
 			{
 				Type: "tuple",
-				Schema: []SchemeJSON{
+				Schema: []SchemaJSON{
 					{Type: "int32"},
 					{Type: "bool"},
 					{Type: "string"},
@@ -23,7 +23,7 @@ func TestBuildScheme_WithRepeatTuples(t *testing.T) {
 			},
 			{
 				Type: "tuple",
-				Schema: []SchemeJSON{
+				Schema: []SchemaJSON{
 					{Type: "int16"},
 					{Type: "bool"},
 					{Type: "string"},
@@ -32,10 +32,10 @@ func TestBuildScheme_WithRepeatTuples(t *testing.T) {
 		},
 	}
 
-	// Build scheme from JSON
-	built := BuildScheme(schemeJSON)
+	// Build schema from JSON
+	built := BuildSchema(&schemaJSON)
 
-	// Manually constructed scheme
+	// Manually constructed schema
 	expected := SRepeat(1, -1,
 		STuple(
 			SInt32,
@@ -51,14 +51,14 @@ func TestBuildScheme_WithRepeatTuples(t *testing.T) {
 
 	// Compare structurally
 	assert.EqualValues(t, expected, built,
-		"Built scheme from JSON should equal manually constructed scheme")
+		"Built schema from JSON should equal manually constructed schema")
 }
 
-func TestBuildScheme_NamedTuple(t *testing.T) {
-	schemeJSON := SchemeJSON{
+func TestBuildSchema_NamedTuple(t *testing.T) {
+	schemaJSON := SchemaJSON{
 		Type:       "tuple",
 		FieldNames: []string{"id", "name", "active"},
-		Schema: []SchemeJSON{
+		Schema: []SchemaJSON{
 			{Type: "int32"},
 			{Type: "string"},
 			{Type: "bool", Nullable: true},
@@ -66,7 +66,7 @@ func TestBuildScheme_NamedTuple(t *testing.T) {
 		VariableLength: true,
 	}
 
-	built := BuildScheme(schemeJSON)
+	built := BuildSchema(&schemaJSON)
 
 	expected := STupleNamedVal(
 		[]string{"id", "name", "active"},
@@ -76,5 +76,5 @@ func TestBuildScheme_NamedTuple(t *testing.T) {
 	)
 
 	assert.EqualValues(t, expected, built,
-		"Built scheme from JSON should equal manually constructed named tuple")
+		"Built schema from JSON should equal manually constructed named tuple")
 }

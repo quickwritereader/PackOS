@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/quickwritereader/PackOS/access"
-	"github.com/quickwritereader/PackOS/scheme"
-	. "github.com/quickwritereader/PackOS/scheme"
-	"github.com/quickwritereader/PackOS/types"
+	"github.com/quickwritereader/PackOS/schema"
+	. "github.com/quickwritereader/PackOS/schema"
+	"github.com/quickwritereader/PackOS/typetags"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -79,22 +79,22 @@ func TestUsage1_WithSChain(t *testing.T) {
 	err := json.Unmarshal([]byte(testJson), &decodedJSON)
 	assert.NoError(t, err, "Unmarshal of testJson should succeed")
 
-	chain := SchemeNamedChain{
-		SchemeChain: SChain(
-			SType(types.TypeMap),   // meta
-			SType(types.TypeTuple), // users
-			SType(types.TypeTuple), // projects
-			SType(types.TypeMap),   // logs
-			SType(types.TypeMap),   // data
+	chain := SchemaNamedChain{
+		SchemaChain: SChain(
+			SType(typetags.TypeMap),   // meta
+			SType(typetags.TypeTuple), // users
+			SType(typetags.TypeTuple), // projects
+			SType(typetags.TypeMap),   // logs
+			SType(typetags.TypeMap),   // data
 		),
 		FieldNames: []string{"meta", "users", "projects", "logs", "data"},
 	}
 
-	// Encode using the scheme
+	// Encode using the schema
 	encoded, err := EncodeValueNamed(decodedJSON, chain)
 	assert.NoError(t, err, "Encoding with SChain should succeed")
 
-	// Decode back using the same scheme
+	// Decode back using the same schema
 	decodedBack, err := DecodeBufferNamed(encoded, chain)
 	assert.NoError(t, err, "Decoding with SChain should succeed")
 
@@ -128,27 +128,27 @@ func TestUsage1_WithSChainMax(t *testing.T) {
 	err := json.Unmarshal([]byte(testJson), &decodedJSON)
 	assert.NoError(t, err, "Unmarshal of testJson should succeed")
 
-	chain := SchemeNamedChain{
-		SchemeChain: SChain(
+	chain := SchemaNamedChain{
+		SchemaChain: SChain(
 			STupleNamed([]string{"version", "author", "timestamp", "description"}, SString, SString, SString, SString), // meta
 			// Users section: array of tuples
 			STupleValFlatten(SRepeat(1, -1, STupleNamedVal(
 				[]string{"id", "name", "roles", "settings", "activity"},
-				SInt32,                 // id
-				SString,                // name
-				SType(types.TypeTuple), // roles
+				SInt32,                    // id
+				SString,                   // name
+				SType(typetags.TypeTuple), // roles
 				STupleNamed( // settings is solid
 					[]string{"theme", "notifications", "languages"},
-					SString, SBool, SType(types.TypeTuple),
+					SString, SBool, SType(typetags.TypeTuple),
 				),
-				SType(types.TypeTuple), // activity is not solid, so keep as map
+				SType(typetags.TypeTuple), // activity is not solid, so keep as map
 			))),
 			STupleValFlatten(SRepeat(1, -1, STupleNamedVal(
 				[]string{"projectId", "title", "status", "members", "tasks"},
-				SString,                // projectId
-				SString,                // title
-				SString,                // status
-				SType(types.TypeTuple), // members (array of ints)
+				SString,                   // projectId
+				SString,                   // title
+				SString,                   // status
+				SType(typetags.TypeTuple), // members (array of ints)
 				STupleValFlatten(SRepeat(1, -1, STupleNamed( // tasks
 					[]string{"taskId", "title", "completed"},
 					SString, // taskId
@@ -175,7 +175,7 @@ func TestUsage1_WithSChainMax(t *testing.T) {
 			STupleNamedVal(
 				[]string{"matrix", "nested", "largeArray"},
 				// matrix: 2D array of ints
-				STupleValFlatten(SRepeat(1, -1, SType(types.TypeTuple))),
+				STupleValFlatten(SRepeat(1, -1, SType(typetags.TypeTuple))),
 				//nested
 				STupleNamedVal(
 					[]string{"alpha"},
@@ -185,8 +185,8 @@ func TestUsage1_WithSChainMax(t *testing.T) {
 							[]string{"gamma"},
 							STupleNamedVal(
 								[]string{"delta", "epsilon"},
-								SString,                // delta
-								SType(types.TypeTuple), // epsilon (heterogeneous array)
+								SString,                   // delta
+								SType(typetags.TypeTuple), // epsilon (heterogeneous array)
 							),
 						),
 					),
@@ -203,11 +203,11 @@ func TestUsage1_WithSChainMax(t *testing.T) {
 		FieldNames: []string{"meta", "users", "projects", "logs", "data"},
 	}
 
-	// Encode using the scheme
+	// Encode using the schema
 	encoded, err := EncodeValueNamed(decodedJSON, chain)
 	assert.NoError(t, err, "Encoding with SChain should succeed")
 
-	// Decode back using the same scheme
+	// Decode back using the same schema
 	decodedBack, err := DecodeBufferNamed(encoded, chain)
 	assert.NoError(t, err, "Decoding with SChain should succeed")
 
@@ -231,16 +231,16 @@ func TestUsage1_WithSChainMax(t *testing.T) {
 
 func TestDefaultHugoConfigRoundTrip(t *testing.T) {
 
-	SchemeJsonStr := `
+	SchemaJsonStr := `
 {"type":"tuple","variableLength":true,"fieldNames":["baseURL","languageCode","title","theme",
 "paginate","permalinks","outputs","menus"],"schema":[{"type":"string","pattern":"^(https?://.*|/)$"},
-{"type":"string"},{"type":"string"},{"type":"string"},{"type":"int32","min":1},{"type":"tuple",
+{"type":"string"},{"type":"string"},{"type":"string"},{"type":"int32"},{"type":"tuple",
 "fieldNames":["blog"],"schema":[{"type":"string","pattern":"^/blog/"}]},{"type":"tuple",
 "fieldNames":["home"],"schema":[{"type":"tuple","variableLength":true,"flatten":true,"schema":[
 {"type":"repeat","min":0,"max":8,"schema":[{"type":"string","pattern":"^(HTML|RSS|JSON|AMP)$"}]}]}]},
 {"type":"tuple","fieldNames":["main"],"flatten":false,"variableLength":true,"schema":[{"type":"repeat",
 "min":1,"max":1024,"schema":[{"type":"tuple","fieldNames":["identifier","name","url","weight"],
-"schema":[{"type":"string"},{"type":"string"},{"type":"string"},{"type":"int32","min":1}]}]}]}]}
+"schema":[{"type":"string"},{"type":"string"},{"type":"string"},{"type":"int32"}]}]}]}]}
 	`
 	// A minimal but valid Hugo config JSON
 	configJSON := `{
@@ -263,22 +263,22 @@ func TestDefaultHugoConfigRoundTrip(t *testing.T) {
 		}
 	}`
 
-	var SchemeJson SchemeJSON
-	require.NoError(t, json.Unmarshal([]byte(SchemeJsonStr), &SchemeJson), "failed to unmarshal config")
+	var SchemaJson SchemaJSON
+	require.NoError(t, json.Unmarshal([]byte(SchemaJsonStr), &SchemaJson), "failed to unmarshal config")
 
-	schain := scheme.SChain(scheme.BuildScheme(SchemeJson))
+	schain := schema.SChain(schema.BuildSchema(&SchemaJson))
 
 	// Decode into generic map
 	var decoded map[string]any
 	require.NoError(t, json.Unmarshal([]byte(configJSON), &decoded), "failed to unmarshal config")
 
-	// Encode using your scheme
-	encoded, err := scheme.EncodeValue(decoded, schain)
-	require.NoError(t, err, "scheme encode failed")
+	// Encode using your schema
+	encoded, err := schema.EncodeValue(decoded, schain)
+	require.NoError(t, err, "schema encode failed")
 
-	// Decode back using your scheme
-	roundTrip, err := scheme.DecodeBuffer(encoded, schain)
-	require.NoError(t, err, "scheme decode failed")
+	// Decode back using your schema
+	roundTrip, err := schema.DecodeBuffer(encoded, schain)
+	require.NoError(t, err, "schema decode failed")
 
 	// Marshal both original and round-trip to canonical JSON
 	origJSON, err := json.Marshal(decoded)
@@ -294,7 +294,7 @@ func TestDefaultHugoConfigRoundTrip(t *testing.T) {
 
 func TestDefaultHugoConfigRoundTripMultiCheck(t *testing.T) {
 
-	SchemeJsonStr := `
+	SchemaJsonStr := `
 		{
 		"type": "tuple",
 		"variableLength": true,
@@ -388,22 +388,22 @@ func TestDefaultHugoConfigRoundTripMultiCheck(t *testing.T) {
 		}
 	}`
 
-	var SchemeJson SchemeJSON
-	require.NoError(t, json.Unmarshal([]byte(SchemeJsonStr), &SchemeJson), "failed to unmarshal config")
+	var SchemaJson SchemaJSON
+	require.NoError(t, json.Unmarshal([]byte(SchemaJsonStr), &SchemaJson), "failed to unmarshal config")
 
-	schain := scheme.SChain(scheme.BuildScheme(SchemeJson))
+	schain := schema.SChain(schema.BuildSchema(&SchemaJson))
 
 	// Decode into generic map
 	var decoded map[string]any
 	require.NoError(t, json.Unmarshal([]byte(configJSON), &decoded), "failed to unmarshal config")
 
-	// Encode using your scheme
-	encoded, err := scheme.EncodeValue(decoded, schain)
-	require.NoError(t, err, "scheme encode failed")
+	// Encode using your schema
+	encoded, err := schema.EncodeValue(decoded, schain)
+	require.NoError(t, err, "schema encode failed")
 
-	// Decode back using your scheme
-	roundTrip, err := scheme.DecodeBuffer(encoded, schain)
-	require.NoError(t, err, "scheme decode failed")
+	// Decode back using your schema
+	roundTrip, err := schema.DecodeBuffer(encoded, schain)
+	require.NoError(t, err, "schema decode failed")
 
 	// Marshal both original and round-trip to canonical JSON
 	origJSON, err := json.Marshal(decoded)

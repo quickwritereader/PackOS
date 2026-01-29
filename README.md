@@ -173,7 +173,7 @@ expected := []any{
 fmt.Println("Generic Decoded:", generic) 
 ```
 
-## Scheme, builder and scheme guided decode examples.
+## Schema, builder and schema guided decode examples.
 ```go
 actual := pack.Pack(
 pack.PackInt16(12345),
@@ -234,8 +234,8 @@ SInt64,
 SBool,
 SMap(
 	SString.Match("meta"),
-	SMapUnordered(map[string]Scheme{
-		"age":  SInt32.Range(18, 99),               // declared first
+	SMapUnordered(map[string]Schema{
+		"age":  SInt32.RangeValues(18, 99),               // declared first
 		"user": SBytes(len("alice")),               // declared second
 		"role": SString.Pattern(`^(admin|guest)$`), // declared third
 	}),
@@ -264,7 +264,7 @@ PackString("world-suffix"),      // suffix
 
 chain := SChain(
 SString.Pattern(`^\d{4}-\d{2}-\d{2}$`),                              // date pattern YYYY-MM-DD
-SInt32.Range(1, 100),                                                // int range
+SInt32.RangeValues(1, 100),                                                // int range
 SString.Pattern(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`), // email
 SString.Prefix("prefix-"),                                           // prefix match
 SString.Suffix("-suffix"),                                           // suffix match
@@ -343,8 +343,8 @@ expected := pack.Pack(
 )
 
 // Schema with named tuples
-chain := SchemeNamedChain{
-	SchemeChain: SChain(
+chain := SchemaNamedChain{
+	SchemaChain: SChain(
 		STupleNamed(
 			[]string{"year", "flag", "code"},
 			SInt32,
@@ -380,15 +380,15 @@ fmt.Println("Encoded Named:", actual)
 ```
 
 ```go
-// Define scheme in JSON form
-schemeJSON := SchemeJSON{
+// Define schema in JSON form
+schemaJSON := SchemaJSON{
 Type: "repeat",
-Min:  1,
-Max:  -1,
-Schema: []SchemeJSON{
+Min:  PtrToInt64(1),
+Max:  nil,
+Schema: []SchemaJSON{
 	{
 		Type: "tuple",
-		Schema: []SchemeJSON{
+		Schema: []SchemaJSON{
 			{Type: "int32"},
 			{Type: "bool"},
 			{Type: "string"},
@@ -396,7 +396,7 @@ Schema: []SchemeJSON{
 	},
 	{
 		Type: "tuple",
-		Schema: []SchemeJSON{
+		Schema: []SchemaJSON{
 			{Type: "int16"},
 			{Type: "bool"},
 			{Type: "string"},
@@ -405,10 +405,10 @@ Schema: []SchemeJSON{
 },
 }
 
-// Build scheme from JSON
-built := BuildScheme(schemeJSON)
+// Build schema from JSON
+built := BuildSchema(&schemaJSON)
 
-// Manually constructed scheme
+// Manually constructed schema
 expected := SRepeat(1, -1,
 STuple(
 	SInt32,

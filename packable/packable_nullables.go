@@ -2,7 +2,7 @@ package packable
 
 import (
 	"github.com/quickwritereader/PackOS/access"
-	"github.com/quickwritereader/PackOS/types"
+	"github.com/quickwritereader/PackOS/typetags"
 )
 
 func PackNullableInt8(v *int8) PackableNullableInt8          { return PackableNullableInt8{V: v} }
@@ -19,8 +19,8 @@ func PackNullableBool(v *bool) PackableNullableBool          { return PackableNu
 
 type PackableNullableInt8 struct{ V *int8 }
 
-func (p PackableNullableInt8) HeaderType() types.Type { return types.TypeInteger }
-func (p PackableNullableInt8) ValueSize() int         { return 1 }
+func (p PackableNullableInt8) HeaderType() typetags.Type { return typetags.TypeInteger }
+func (p PackableNullableInt8) ValueSize() int            { return 1 }
 func (p PackableNullableInt8) Write(buf []byte, pos int) int {
 	return access.WriteNullableInt8(buf, pos, p.V)
 }
@@ -30,8 +30,8 @@ func (v PackableNullableInt8) PackInto(p *access.PutAccess) {
 
 type PackableNullableUint8 struct{ V *uint8 }
 
-func (p PackableNullableUint8) HeaderType() types.Type { return types.TypeInteger }
-func (p PackableNullableUint8) ValueSize() int         { return 1 }
+func (p PackableNullableUint8) HeaderType() typetags.Type { return typetags.TypeInteger }
+func (p PackableNullableUint8) ValueSize() int            { return 1 }
 func (p PackableNullableUint8) Write(buf []byte, pos int) int {
 	return access.WriteNullableUint8(buf, pos, p.V)
 }
@@ -41,8 +41,8 @@ func (v PackableNullableUint8) PackInto(p *access.PutAccess) {
 
 type PackableNullableInt16 struct{ V *int16 }
 
-func (p PackableNullableInt16) HeaderType() types.Type { return types.TypeInteger }
-func (p PackableNullableInt16) ValueSize() int         { return 2 }
+func (p PackableNullableInt16) HeaderType() typetags.Type { return typetags.TypeInteger }
+func (p PackableNullableInt16) ValueSize() int            { return 2 }
 func (p PackableNullableInt16) Write(buf []byte, pos int) int {
 	return access.WriteNullableInt16(buf, pos, p.V)
 }
@@ -52,8 +52,8 @@ func (v PackableNullableInt16) PackInto(p *access.PutAccess) {
 
 type PackableNullableUint16 struct{ V *uint16 }
 
-func (p PackableNullableUint16) HeaderType() types.Type { return types.TypeInteger }
-func (p PackableNullableUint16) ValueSize() int         { return 2 }
+func (p PackableNullableUint16) HeaderType() typetags.Type { return typetags.TypeInteger }
+func (p PackableNullableUint16) ValueSize() int            { return 2 }
 func (p PackableNullableUint16) Write(buf []byte, pos int) int {
 	return access.WriteNullableUint16(buf, pos, p.V)
 }
@@ -63,8 +63,8 @@ func (v PackableNullableUint16) PackInto(p *access.PutAccess) {
 
 type PackableNullableInt32 struct{ V *int32 }
 
-func (p PackableNullableInt32) HeaderType() types.Type { return types.TypeInteger }
-func (p PackableNullableInt32) ValueSize() int         { return 4 }
+func (p PackableNullableInt32) HeaderType() typetags.Type { return typetags.TypeInteger }
+func (p PackableNullableInt32) ValueSize() int            { return 4 }
 func (p PackableNullableInt32) Write(buf []byte, pos int) int {
 	return access.WriteNullableInt32(buf, pos, p.V)
 }
@@ -74,8 +74,8 @@ func (v PackableNullableInt32) PackInto(p *access.PutAccess) {
 
 type PackableNullableUint32 struct{ V *uint32 }
 
-func (p PackableNullableUint32) HeaderType() types.Type { return types.TypeInteger }
-func (p PackableNullableUint32) ValueSize() int         { return 4 }
+func (p PackableNullableUint32) HeaderType() typetags.Type { return typetags.TypeInteger }
+func (p PackableNullableUint32) ValueSize() int            { return 4 }
 func (p PackableNullableUint32) Write(buf []byte, pos int) int {
 	return access.WriteNullableUint32(buf, pos, p.V)
 }
@@ -85,8 +85,8 @@ func (v PackableNullableUint32) PackInto(p *access.PutAccess) {
 
 type PackableNullableInt64 struct{ V *int64 }
 
-func (p PackableNullableInt64) HeaderType() types.Type { return types.TypeInteger }
-func (p PackableNullableInt64) ValueSize() int         { return 8 }
+func (p PackableNullableInt64) HeaderType() typetags.Type { return typetags.TypeInteger }
+func (p PackableNullableInt64) ValueSize() int            { return 8 }
 func (p PackableNullableInt64) Write(buf []byte, pos int) int {
 	return access.WriteNullableInt64(buf, pos, p.V)
 }
@@ -96,8 +96,8 @@ func (v PackableNullableInt64) PackInto(p *access.PutAccess) {
 
 type PackableNullableUint64 struct{ V *uint64 }
 
-func (p PackableNullableUint64) HeaderType() types.Type { return types.TypeInteger }
-func (p PackableNullableUint64) ValueSize() int         { return 8 }
+func (p PackableNullableUint64) HeaderType() typetags.Type { return typetags.TypeInteger }
+func (p PackableNullableUint64) ValueSize() int            { return 8 }
 func (p PackableNullableUint64) Write(buf []byte, pos int) int {
 	return access.WriteNullableUint64(buf, pos, p.V)
 }
@@ -107,8 +107,8 @@ func (v PackableNullableUint64) PackInto(p *access.PutAccess) {
 
 type PackableNullableFloat32 struct{ V *float32 }
 
-func (p PackableNullableFloat32) HeaderType() types.Type { return types.TypeFloating }
-func (p PackableNullableFloat32) ValueSize() int         { return 4 }
+func (p PackableNullableFloat32) HeaderType() typetags.Type { return typetags.TypeFloating }
+func (p PackableNullableFloat32) ValueSize() int            { return 4 }
 func (p PackableNullableFloat32) Write(buf []byte, pos int) int {
 	return access.WriteNullableFloat32(buf, pos, p.V)
 }
@@ -118,8 +118,8 @@ func (v PackableNullableFloat32) PackInto(p *access.PutAccess) {
 
 type PackableNullableFloat64 struct{ V *float64 }
 
-func (p PackableNullableFloat64) HeaderType() types.Type { return types.TypeFloating }
-func (p PackableNullableFloat64) ValueSize() int         { return 8 }
+func (p PackableNullableFloat64) HeaderType() typetags.Type { return typetags.TypeFloating }
+func (p PackableNullableFloat64) ValueSize() int            { return 8 }
 func (p PackableNullableFloat64) Write(buf []byte, pos int) int {
 	return access.WriteNullableFloat64(buf, pos, p.V)
 }
@@ -129,8 +129,8 @@ func (v PackableNullableFloat64) PackInto(p *access.PutAccess) {
 
 type PackableNullableBool struct{ V *bool }
 
-func (p PackableNullableBool) HeaderType() types.Type { return types.TypeBool }
-func (p PackableNullableBool) ValueSize() int         { return 1 }
+func (p PackableNullableBool) HeaderType() typetags.Type { return typetags.TypeBool }
+func (p PackableNullableBool) ValueSize() int            { return 1 }
 func (p PackableNullableBool) Write(buf []byte, pos int) int {
 	return access.WriteNullableBool(buf, pos, p.V)
 }
