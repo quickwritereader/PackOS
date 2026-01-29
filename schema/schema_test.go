@@ -328,8 +328,8 @@ func TestDecodePackedMapUnOrderedOptional(t *testing.T) {
 	chain := SChain(
 		SMap(
 			SString.Match("meta"), // key
-			SMapUnorderedOptional(map[string]Schema{
-				"user": SBytes(len("alice")),
+			SMapUnordered(map[string]Schema{
+				"user": SString,
 				"role": SString.Pattern(`^(admin|guest)$`),
 			}),
 			SString.Match("name"),     // key
@@ -812,9 +812,88 @@ func TestEncodePackedTuples(t *testing.T) {
 
 	actual, err := EncodeValue(val, chain)
 	if err != nil {
-		fmt.Println(err)
+		t.Log(err)
 	}
 	assert.Equal(t, expected, actual)
+}
+
+func TestEncodePackedEmptyTuples1(t *testing.T) {
+	expected := pack.Pack(
+		pack.PackTuple(),
+		pack.PackTuple(),
+	)
+
+	chain := SChain(
+		STuple(),
+		STuple(),
+	)
+
+	val := []any{nil, nil}
+
+	actual, err := EncodeValue(val, chain)
+	if err != nil {
+		t.Log(err)
+	}
+	assert.Equal(t, expected, actual)
+}
+func TestEncodePackedEmptyTuples2(t *testing.T) {
+	expected := pack.Pack(
+		pack.PackInt16(5),
+		pack.PackTuple(),
+		pack.PackTuple(),
+		pack.PackInt16(5),
+	)
+
+	chain := SChain(
+		SInt16,
+		STuple(),
+		STuple(),
+		SInt16,
+	)
+
+	val := []any{int16(5), nil, nil, int16(5)}
+
+	actual, err := EncodeValue(val, chain)
+	if err != nil {
+		t.Log(err)
+	}
+	assert.Equal(t, expected, actual)
+}
+func TestEncodeDecodePackedEmptyMap(t *testing.T) {
+	expected := pack.Pack(
+		pack.PackInt16(5),
+		pack.PackMapStr{},
+		pack.PackMapOrdered(),
+		pack.PackMapSorted{},
+		pack.PackMap{},
+		pack.PackMapStrInt32{},
+		pack.PackMapStrInt64{},
+		pack.PackInt16(5),
+	)
+
+	chain := SChain(
+		SInt16,
+		SMap(),
+		SMap(),
+		SMap(),
+		SMap(),
+		SMap(),
+		SMap(),
+		SInt16,
+	)
+
+	val := []any{int16(5), nil, nil, nil, nil, nil, nil, int16(5)}
+
+	actual, err := EncodeValue(val, chain)
+	if err != nil {
+		t.Log(err)
+	}
+	require.Equal(t, expected, actual)
+
+	decoded, err := DecodeBuffer(actual, chain)
+	require.NoError(t, err)
+	assert.EqualValues(t, val, decoded)
+
 }
 
 func TestEncodeFlattenedTuple(t *testing.T) {

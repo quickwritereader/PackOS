@@ -134,7 +134,7 @@ func TestUsage1_WithSChainMax(t *testing.T) {
 			// Users section: array of tuples
 			STupleValFlatten(SRepeat(1, -1, STupleNamedVal(
 				[]string{"id", "name", "roles", "settings", "activity"},
-				SInt32,                    // id
+				SNumber,                   // id
 				SString,                   // name
 				SType(typetags.TypeTuple), // roles
 				STupleNamed( // settings is solid
@@ -195,7 +195,7 @@ func TestUsage1_WithSChainMax(t *testing.T) {
 				// largeArray: solid array of {index, value}
 				STupleValFlatten(SRepeat(1, -1, STupleNamedVal(
 					[]string{"index", "value"},
-					SInt8,   // index
+					SNumber, // index
 					SString, // value
 				))),
 			),
@@ -234,13 +234,13 @@ func TestDefaultHugoConfigRoundTrip(t *testing.T) {
 	SchemaJsonStr := `
 {"type":"tuple","variableLength":true,"fieldNames":["baseURL","languageCode","title","theme",
 "paginate","permalinks","outputs","menus"],"schema":[{"type":"string","pattern":"^(https?://.*|/)$"},
-{"type":"string"},{"type":"string"},{"type":"string"},{"type":"int32"},{"type":"tuple",
+{"type":"string"},{"type":"string"},{"type":"string"},{"type":"number"},{"type":"tuple",
 "fieldNames":["blog"],"schema":[{"type":"string","pattern":"^/blog/"}]},{"type":"tuple",
 "fieldNames":["home"],"schema":[{"type":"tuple","variableLength":true,"flatten":true,"schema":[
 {"type":"repeat","min":0,"max":8,"schema":[{"type":"string","pattern":"^(HTML|RSS|JSON|AMP)$"}]}]}]},
 {"type":"tuple","fieldNames":["main"],"flatten":false,"variableLength":true,"schema":[{"type":"repeat",
 "min":1,"max":1024,"schema":[{"type":"tuple","fieldNames":["identifier","name","url","weight"],
-"schema":[{"type":"string"},{"type":"string"},{"type":"string"},{"type":"int32"}]}]}]}]}
+"schema":[{"type":"string"},{"type":"string"},{"type":"string"},{"type":"number"}]}]}]}]}
 	`
 	// A minimal but valid Hugo config JSON
 	configJSON := `{
@@ -307,7 +307,7 @@ func TestDefaultHugoConfigRoundTripMultiCheck(t *testing.T) {
 			{ "type": "string", "pattern": "^(https?://.*|/)$" },
 			{ "type": "string" },
 			{ "type": "string" },
-			{ "type": "int32", "min": 1 },
+			{ "type": "number", "min": 1 },
 			{ "type": "tuple", "fieldNames": ["blog"], "schema": [
 			{ "type": "string", "pattern": "^/blog/" }
 			]},
@@ -324,7 +324,7 @@ func TestDefaultHugoConfigRoundTripMultiCheck(t *testing.T) {
 				{ "type": "string" },
 				{ "type": "string" },
 				{ "type": "string" },
-				{ "type": "int32", "min": 1 }
+				{ "type": "number", "min": 1 }
 				]}
 			]}
 			]},
@@ -336,7 +336,7 @@ func TestDefaultHugoConfigRoundTripMultiCheck(t *testing.T) {
 				{ "type": "string" },
 				{ "type": "string" },
 				{ "type": "string" },
-				{ "type": "int32", "min": 1 }
+				{ "type": "number", "min": 1 }
 			]}
 			]}
 		]

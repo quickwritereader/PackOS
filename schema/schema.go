@@ -130,12 +130,12 @@ func CheckRange[T constraints.Ordered](val T, min *T, max *T) error {
 
 // For int64
 func CheckIntRange(val int64, min *int64, max *int64) error {
-	return CheckRange[int64](val, min, max)
+	return CheckRange(val, min, max)
 }
 
 // For float64
 func CheckFloatRange(val float64, min *float64, max *float64) error {
-	return CheckRange[float64](val, min, max)
+	return CheckRange(val, min, max)
 }
 
 type StringErrorDetails struct {
@@ -335,12 +335,12 @@ type SchemaMap struct {
 // Validate checks that the sequence matches the SchemaMap definition.
 func (s SchemaMap) Validate(seq *access.SeqGetAccess) error {
 	pos := seq.CurrentIndex()
-	_, err := precheck(SchemaMapName, pos, seq, typetags.TypeMap, s.Width, s.IsNullable())
+	w, err := precheck(SchemaMapName, pos, seq, typetags.TypeMap, s.Width, s.IsNullable())
 	if err != nil {
 		return err
 	}
 
-	if s.Width != 0 {
+	if w != 0 {
 		sub, err := seq.PeekNestedSeq()
 		if err != nil {
 			return NewSchemaError(ErrInvalidFormat, SchemaMapName, "", pos, err)
@@ -361,7 +361,7 @@ func (s SchemaMap) Validate(seq *access.SeqGetAccess) error {
 // Decode reads a SchemaMap from the sequence into an OrderedMapAny.
 func (s SchemaMap) Decode(seq *access.SeqGetAccess) (any, error) {
 	pos := seq.CurrentIndex()
-	_, err := precheck(SchemaMapName, pos, seq, typetags.TypeMap, s.Width, s.IsNullable())
+	w, err := precheck(SchemaMapName, pos, seq, typetags.TypeMap, s.Width, s.IsNullable())
 	if err != nil {
 		return nil, err
 	}
@@ -376,8 +376,8 @@ func (s SchemaMap) Decode(seq *access.SeqGetAccess) (any, error) {
 		)
 	}
 
-	var out *typetags.OrderedMapAny
-	if s.Width != 0 {
+	var out *typetags.OrderedMapAny = nil
+	if w != 0 {
 		sub, err := seq.PeekNestedSeq()
 		if err != nil {
 			return nil, NewSchemaError(ErrInvalidFormat, SchemaMapName, "", pos, err)
@@ -405,6 +405,10 @@ func (s SchemaMap) Decode(seq *access.SeqGetAccess) (any, error) {
 	if err := seq.Advance(); err != nil {
 		return nil, NewSchemaError(ErrUnexpectedEOF, SchemaMapName, "", pos, err)
 	}
+	if out == nil {
+		//return normal nil
+		return nil, nil
+	}
 	return out, nil
 }
 
@@ -412,6 +416,7 @@ func (s SchemaMap) Decode(seq *access.SeqGetAccess) (any, error) {
 func (s SchemaMap) Encode(put *access.PutAccess, val any) error {
 	if s.IsNullable() && val == nil && len(s.Schemas) < 1 {
 		put.AddMapAny(nil, true)
+		return nil
 	}
 
 	if len(s.Schemas)%2 != 0 {
@@ -581,8 +586,8 @@ type Nullable interface {
 	IsNullable() bool
 }
 
-func (s SchemaString) IsNullable() bool { return s.Width < 0 }
-func (s SchemaBytes) IsNullable() bool  { return s.Width < 0 }
+func (s SchemaString) IsNullable() bool { return s.Width <= 0 }
+func (s SchemaBytes) IsNullable() bool  { return s.Width <= 0 }
 func (s SchemaMap) IsNullable() bool    { return s.Width <= 0 }
 
 // Primitives
@@ -756,7 +761,7 @@ func (s SchemaInt8) Encode(put *access.PutAccess, val any) error {
 		put.AddNullableInt8(nil)
 		return nil
 	}
-	if v, ok := convertToNumber[int8](val); ok {
+	if v, ok := val.(int8); ok {
 		put.AddInt8(v)
 		return nil
 	}
@@ -768,7 +773,7 @@ func (s SchemaInt16) Encode(put *access.PutAccess, val any) error {
 		put.AddNullableInt16(nil)
 		return nil
 	}
-	if v, ok := convertToNumber[int16](val); ok {
+	if v, ok := val.(int16); ok {
 		put.AddInt16(v)
 		return nil
 	}
@@ -780,7 +785,7 @@ func (s SchemaInt32) Encode(put *access.PutAccess, val any) error {
 		put.AddNullableInt32(nil)
 		return nil
 	}
-	if v, ok := convertToNumber[int32](val); ok {
+	if v, ok := val.(int32); ok {
 		put.AddInt32(v)
 		return nil
 	}
@@ -792,7 +797,7 @@ func (s SchemaInt64) Encode(put *access.PutAccess, val any) error {
 		put.AddNullableInt64(nil)
 		return nil
 	}
-	if v, ok := convertToNumber[int64](val); ok {
+	if v, ok := val.(int64); ok {
 		put.AddInt64(v)
 		return nil
 	}
@@ -804,7 +809,7 @@ func (s SchemaFloat32) Encode(put *access.PutAccess, val any) error {
 		put.AddNullableFloat32(nil)
 		return nil
 	}
-	if v, ok := convertToNumber[float32](val); ok {
+	if v, ok := val.(float32); ok {
 		put.AddFloat32(v)
 		return nil
 	}
@@ -816,7 +821,7 @@ func (s SchemaFloat64) Encode(put *access.PutAccess, val any) error {
 		put.AddNullableFloat64(nil)
 		return nil
 	}
-	if v, ok := convertToNumber[float64](val); ok {
+	if v, ok := val.(float64); ok {
 		put.AddFloat64(v)
 		return nil
 	}
@@ -828,22 +833,24 @@ func SType(tag typetags.Type) Schema {
 }
 
 var (
-	SBool        Schema       = SchemaBool{}
-	SInt8        Schema       = SchemaInt8{}
-	SInt16       SchemaInt16  = SchemaInt16{}
-	SInt32       SchemaInt32  = SchemaInt32{}
-	SInt64       SchemaInt64  = SchemaInt64{}
-	SFloat32     Schema       = SchemaFloat32{}
-	SFloat64     Schema       = SchemaFloat64{}
-	SNullBool    Schema       = SchemaBool{Nullable: true}
-	SNullInt8    Schema       = SchemaInt8{Nullable: true}
-	SNullInt16   Schema       = SchemaInt16{Nullable: true}
-	SNullInt32   Schema       = SchemaInt32{Nullable: true}
-	SNullInt64   Schema       = SchemaInt64{Nullable: true}
-	SNullFloat32 Schema       = SchemaFloat32{Nullable: true}
-	SNullFloat64 Schema       = SchemaFloat64{Nullable: true}
-	SString      SchemaString = SchemaString{Width: 0}
-	SAny                      = SchemaAny{}
+	SBool         Schema       = SchemaBool{}
+	SInt8         Schema       = SchemaInt8{}
+	SInt16        SchemaInt16  = SchemaInt16{}
+	SInt32        SchemaInt32  = SchemaInt32{}
+	SInt64        SchemaInt64  = SchemaInt64{}
+	SFloat32      Schema       = SchemaFloat32{}
+	SFloat64      Schema       = SchemaFloat64{}
+	SNumber       Schema       = SchemaNumber{}
+	SNumberString Schema       = SchemaNumber{DecodeAsString: true}
+	SNullBool     Schema       = SchemaBool{Nullable: true}
+	SNullInt8     Schema       = SchemaInt8{Nullable: true}
+	SNullInt16    Schema       = SchemaInt16{Nullable: true}
+	SNullInt32    Schema       = SchemaInt32{Nullable: true}
+	SNullInt64    Schema       = SchemaInt64{Nullable: true}
+	SNullFloat32  Schema       = SchemaFloat32{Nullable: true}
+	SNullFloat64  Schema       = SchemaFloat64{Nullable: true}
+	SString       SchemaString = SchemaString{Width: 0}
+	SAny                       = SchemaAny{}
 )
 
 func SBytes(width int) Schema { return SchemaBytes{Width: width} }
@@ -973,12 +980,13 @@ func EncodeValueNamed(val any, chain SchemaNamedChain) ([]byte, error) {
 			if err != nil {
 				return nil, NewSchemaError(ErrEncode, SchemaNamedChainName, fn, -1, err)
 			}
-		} else {
-			if chain.Schemas[i].IsNullable() {
-				//just add null tag and skip
-				chain.Schemas[i].Encode(put, nil)
-				continue
+		} else if chain.Schemas[i].IsNullable() {
+			//just add null tag and skip
+			err := chain.Schemas[i].Encode(put, nil)
+			if err != nil {
+				return nil, NewSchemaError(ErrEncode, SchemaNamedChainName, fn, -1, err)
 			}
+		} else {
 			return nil, NewSchemaError(ErrEncode, SchemaNamedChainName, fn, -1, MissingKeyErrorDetails{Key: fn})
 		}
 
@@ -1193,7 +1201,7 @@ func (s SchemaInt16) Range(min, max *int64) Schema {
 			return val, nil
 		},
 		EncodeFunc: func(put *access.PutAccess, val any) error {
-			if value, ok := convertToNumber[int16](val); ok {
+			if value, ok := val.(int16); ok {
 				err := CheckIntRange(int64(value), min, max)
 				if err != nil {
 					return NewSchemaError(ErrOutOfRange, SchemaInt16Name, "", -1, err)
@@ -1239,7 +1247,7 @@ func (s SchemaInt32) Range(min, max *int64) Schema {
 			return val, nil
 		},
 		EncodeFunc: func(put *access.PutAccess, val any) error {
-			if value, ok := convertToNumber[int32](val); ok {
+			if value, ok := val.(int32); ok {
 				err := CheckIntRange(int64(value), min, max)
 				if err != nil {
 					return NewSchemaError(ErrOutOfRange, SchemaInt32Name, "", -1, err)
@@ -1285,7 +1293,7 @@ func (s SchemaInt64) Range(min, max *int64) Schema {
 			return val, nil
 		},
 		EncodeFunc: func(put *access.PutAccess, val any) error {
-			if value, ok := convertToNumber[int64](val); ok {
+			if value, ok := val.(int64); ok {
 				err := CheckIntRange(value, min, max)
 				if err != nil {
 					return NewSchemaError(ErrOutOfRange, SchemaInt64Name, "", -1, err)
@@ -1350,7 +1358,7 @@ func (s SchemaInt64) DateRange(from, to *time.Time) Schema {
 			return val, nil
 		},
 		EncodeFunc: func(put *access.PutAccess, val any) error {
-			if value, ok := convertToNumber[int64](val); ok {
+			if value, ok := val.(int64); ok {
 				err := CheckIntRange(value, min, max)
 				if err != nil {
 					return NewSchemaError(ErrOutOfRange, SchemaInt64Name, "", -1, err)
@@ -1365,20 +1373,20 @@ func (s SchemaInt64) DateRange(from, to *time.Time) Schema {
 }
 
 type SchemaMapUnordered struct {
-	Fields      map[string]Schema
-	OptionalMap bool
+	Fields   map[string]Schema
+	Nullable bool
 }
 
 func SMapUnordered(mappedSchemas map[string]Schema) Schema {
-	return SchemaMapUnordered{Fields: mappedSchemas, OptionalMap: false}
+	return SchemaMapUnordered{Fields: mappedSchemas, Nullable: false}
 }
 
 func SMapUnorderedOptional(mappedSchemas map[string]Schema) Schema {
-	return SchemaMapUnordered{Fields: mappedSchemas, OptionalMap: true}
+	return SchemaMapUnordered{Fields: mappedSchemas, Nullable: true}
 }
 
-func (_ SchemaMapUnordered) IsNullable() bool {
-	return true
+func (s SchemaMapUnordered) IsNullable() bool {
+	return s.Nullable
 }
 
 // Constant schema name for unordered maps
@@ -1424,11 +1432,13 @@ func (s SchemaMapUnordered) Validate(seq *access.SeqGetAccess) error {
 				}
 			}
 		}
-		if !s.OptionalMap {
-			for key := range s.Fields {
-				if !seen[key] {
+
+		for key, schema := range s.Fields {
+			if !seen[key] {
+				if !schema.IsNullable() {
 					return NewSchemaError(ErrConstraintViolated, SchemaMapUnorderedName, "", pos, MissingKeyErrorDetails{Key: key})
 				}
+
 			}
 		}
 
@@ -1483,9 +1493,10 @@ func (s SchemaMapUnordered) Decode(seq *access.SeqGetAccess) (any, error) {
 				}
 			}
 		}
-		if !s.OptionalMap {
-			for key := range s.Fields {
-				if _, ok := out[key]; !ok {
+
+		for key, schema := range s.Fields {
+			if _, ok := out[key]; !ok {
+				if !schema.IsNullable() {
 					return nil, NewSchemaError(ErrConstraintViolated, SchemaMapUnorderedName, "", pos, MissingKeyErrorDetails{Key: key})
 				}
 			}
@@ -1499,7 +1510,10 @@ func (s SchemaMapUnordered) Decode(seq *access.SeqGetAccess) (any, error) {
 }
 
 func (s SchemaMapUnordered) Encode(put *access.PutAccess, val any) error {
-
+	if s.IsNullable() && val == nil {
+		put.AddMap(nil)
+		return nil
+	}
 	if mapKV, ok := val.(map[string]any); ok {
 
 		nested := put.BeginMap()
@@ -1614,7 +1628,10 @@ func (s TupleSchema) Decode(seq *access.SeqGetAccess) (any, error) {
 }
 
 func (s TupleSchema) Encode(put *access.PutAccess, val any) error {
-
+	if val == nil && s.Nullable {
+		put.AddAnyTuple(nil, false)
+		return nil
+	}
 	if valArr, ok := val.([]any); ok {
 
 		nested := put.BeginTuple()
@@ -1774,6 +1791,10 @@ func (s TupleSchemaNamed) Decode(seq *access.SeqGetAccess) (any, error) {
 }
 
 func (s TupleSchemaNamed) Encode(put *access.PutAccess, val any) error {
+	if s.Nullable && val == nil {
+		put.AddAnyTuple(nil, false)
+		return nil
+	}
 	if len(s.FieldNames) != len(s.Schemas) {
 		return NewSchemaError(ErrConstraintViolated, TupleSchemaNamedName, "", 0, SizeExact{Actual: len(s.FieldNames), Exact: len(s.Schemas)})
 	}
@@ -1832,7 +1853,10 @@ func (s TupleSchemaNamed) Encode(put *access.PutAccess, val any) error {
 					}
 				} else if s.Schemas[i].IsNullable() {
 					//just add null tag and skip
-					s.Schemas[i].Encode(put, nil)
+					err := s.Schemas[i].Encode(nested, nil)
+					if err != nil {
+						return NewSchemaError(ErrInvalidFormat, TupleSchemaNamedName, key, -1, err)
+					}
 				} else {
 					return NewSchemaError(ErrInvalidFormat, TupleSchemaNamedName, "", -1, MissingKeyErrorDetails{Key: key})
 				}
@@ -2038,7 +2062,10 @@ func (s SchemaMultiCheckNamesSchema) Decode(seq *access.SeqGetAccess) (any, erro
 }
 
 func (s SchemaMultiCheckNamesSchema) Encode(put *access.PutAccess, val any) error {
-
+	if s.Nullable && val == nil {
+		put.AddBytes(nil)
+		return nil
+	}
 	set := make(map[string]struct{}, len(s.FieldNames))
 	switch v := val.(type) {
 	case string:
@@ -2333,9 +2360,12 @@ func (s SchemaMapRepeat) IsNullable() bool {
 
 func (s SchemaMapRepeat) Validate(seq *access.SeqGetAccess) error {
 	pos := seq.CurrentIndex()
-	_, err := precheck(SchemaMapRepeatName, pos, seq, typetags.TypeMap, -1, s.IsNullable())
+	w, err := precheck(SchemaMapRepeatName, pos, seq, typetags.TypeMap, -1, s.IsNullable())
 	if err != nil {
 		return err
+	}
+	if w == 0 && s.IsNullable() {
+		return nil
 	}
 	subseq, err := seq.PeekNestedSeq()
 	if err != nil {
@@ -2373,9 +2403,12 @@ func (s SchemaMapRepeat) Validate(seq *access.SeqGetAccess) error {
 
 func (s SchemaMapRepeat) Decode(seq *access.SeqGetAccess) (any, error) {
 	pos := seq.CurrentIndex()
-	_, err := precheck(SchemaMapRepeatName, pos, seq, typetags.TypeMap, 0, s.IsNullable())
+	w, err := precheck(SchemaMapRepeatName, pos, seq, typetags.TypeMap, 0, s.IsNullable())
 	if err != nil {
 		return nil, err
+	}
+	if w == 0 && s.IsNullable() {
+		return nil, nil
 	}
 	subseq, err := seq.PeekNestedSeq()
 	if err != nil {
@@ -2418,6 +2451,10 @@ func (s SchemaMapRepeat) Decode(seq *access.SeqGetAccess) (any, error) {
 }
 
 func (s SchemaMapRepeat) Encode(put *access.PutAccess, val any) error {
+	if s.IsNullable() && val == nil {
+		put.AddMap(nil)
+		return nil
+	}
 	mapKV, ok := val.(map[string]any)
 	if !ok {
 		return NewSchemaError(ErrEncode, SchemaMapRepeatName, "", -1, ErrTypeMisMatch)

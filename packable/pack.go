@@ -15,6 +15,10 @@ func NewTuple(args ...access.Packable) Tuple {
 
 // ValueSize returns the size of the packed
 func (p Tuple) ValueSize() int {
+	if len(*p.args) == 0 {
+		// return 0
+		return 0
+	}
 	value_size := 0
 	for _, arg := range *p.args {
 		value_size += arg.ValueSize()

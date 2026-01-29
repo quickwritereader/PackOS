@@ -429,7 +429,7 @@ STuple(
 ```go
 func TestDefaultHugoConfigRoundTripMultiCheck(t *testing.T) {
 
-	SchemeJsonStr := `
+	SchemaJsonStr := `
 		{
 		"type": "tuple",
 		"variableLength": true,
@@ -523,22 +523,22 @@ func TestDefaultHugoConfigRoundTripMultiCheck(t *testing.T) {
 		}
 	}`
 
-	var SchemeJson SchemeJSON
-	require.NoError(t, json.Unmarshal([]byte(SchemeJsonStr), &SchemeJson), "failed to unmarshal config")
+	var SchemaJson SchemaJSON
+	require.NoError(t, json.Unmarshal([]byte(SchemaJsonStr), &SchemaJson), "failed to unmarshal config")
 
-	schain := scheme.SChain(scheme.BuildScheme(SchemeJson))
+	schain := schema.SChain(schema.BuildSchema(&SchemaJson))
 
 	// Decode into generic map
 	var decoded map[string]any
 	require.NoError(t, json.Unmarshal([]byte(configJSON), &decoded), "failed to unmarshal config")
 
-	// Encode using your scheme
-	encoded, err := scheme.EncodeValue(decoded, schain)
-	require.NoError(t, err, "scheme encode failed")
+	// Encode using your schema
+	encoded, err := schema.EncodeValue(decoded, schain)
+	require.NoError(t, err, "schema encode failed")
 
-	// Decode back using your scheme
-	roundTrip, err := scheme.DecodeBuffer(encoded, schain)
-	require.NoError(t, err, "scheme decode failed")
+	// Decode back using your schema
+	roundTrip, err := schema.DecodeBuffer(encoded, schain)
+	require.NoError(t, err, "schema decode failed")
 
 	// Marshal both original and round-trip to canonical JSON
 	origJSON, err := json.Marshal(decoded)

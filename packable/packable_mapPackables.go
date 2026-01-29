@@ -11,6 +11,9 @@ type PackMapSorted map[string]access.Packable
 
 // ValueSize returns the size of the packed map's content.
 func (p PackMapSorted) ValueSize() int {
+	if len(p) == 0 {
+		return 0
+	}
 	size := 0
 	for k, v := range p {
 		// Add the size of the key and the size of the packed value.
@@ -26,6 +29,9 @@ func (p PackMapSorted) HeaderType() typetags.Type {
 
 // Add packs the map into a byte buffer by sorting keys first for a deterministic result.
 func (p PackMapSorted) Write(buf []byte, pos int) int {
+	if len(p) == 0 {
+		return pos
+	}
 	keys := utils.SortKeys(p)
 	headerSize := len(p)*2*access.HeaderTagSize + access.HeaderTagSize
 	first := pos
@@ -51,6 +57,9 @@ type PackMap map[string]access.Packable
 
 // ValueSize returns the size of the packed map's content.
 func (p PackMap) ValueSize() int {
+	if len(p) == 0 {
+		return 0
+	}
 	size := 0
 	for k, v := range p {
 		// Add the size of the key and the size of the packed value.
@@ -66,6 +75,9 @@ func (p PackMap) HeaderType() typetags.Type {
 
 // Add packs the map into a byte buffer. This version does not sort keys.
 func (p PackMap) Write(buf []byte, pos int) int {
+	if len(p) == 0 {
+		return pos
+	}
 	headerSize := len(p)*2*access.HeaderTagSize + access.HeaderTagSize
 	first := pos
 	posH := pos
@@ -89,6 +101,9 @@ type PackMapStr map[string]string
 
 // ValueSize returns the size of the packed map's content.
 func (p PackMapStr) ValueSize() int {
+	if len(p) == 0 {
+		return 0
+	}
 	size := 0
 	for k, v := range p {
 		// Add the size of the key and the size of the packed value.
@@ -104,6 +119,9 @@ func (p PackMapStr) HeaderType() typetags.Type {
 
 // Add packs the map into a byte buffer. This version does not sort keys.
 func (p PackMapStr) Write(buf []byte, pos int) int {
+	if len(p) == 0 {
+		return pos
+	}
 	headerSize := len(p)*2*access.HeaderTagSize + access.HeaderTagSize
 	first := pos
 	posH := pos
@@ -127,6 +145,9 @@ type PackMapStrInt32 map[string]int32
 
 // ValueSize returns the size of the packed map's content.
 func (p PackMapStrInt32) ValueSize() int {
+	if len(p) == 0 {
+		return 0
+	}
 	size := 0
 	for k := range p {
 		size += len(k)
@@ -142,6 +163,9 @@ func (p PackMapStrInt32) HeaderType() typetags.Type {
 
 // Write packs the map into a byte buffer. This version does not sort keys.
 func (p PackMapStrInt32) Write(buf []byte, pos int) int {
+	if len(p) == 0 {
+		return pos
+	}
 	headerSize := len(p)*2*access.HeaderTagSize + access.HeaderTagSize
 	first := pos
 	posH := pos
@@ -166,6 +190,9 @@ type PackMapStrInt64 map[string]int64
 
 // ValueSize returns the size of the packed map's content.
 func (p PackMapStrInt64) ValueSize() int {
+	if len(p) == 0 {
+		return 0
+	}
 	size := 0
 	for k := range p {
 		size += len(k)
@@ -181,6 +208,9 @@ func (p PackMapStrInt64) HeaderType() typetags.Type {
 
 // Write packs the map into a byte buffer. This version does not sort keys.
 func (p PackMapStrInt64) Write(buf []byte, pos int) int {
+	if len(p) == 0 {
+		return pos
+	}
 	headerSize := len(p)*2*access.HeaderTagSize + access.HeaderTagSize
 	first := pos
 	posH := pos
@@ -231,6 +261,9 @@ func (p *PackableMapOrdered) Set(key string, val access.Packable) {
 
 // ValueSize returns the size of the packed map's content.
 func (p *PackableMapOrdered) ValueSize() int {
+	if len(p.om.Keys()) == 0 {
+		return 0
+	}
 	size := 0
 	for k, v := range p.om.ItemsIter() {
 		size += len(k) + v.ValueSize()
@@ -245,6 +278,9 @@ func (p *PackableMapOrdered) HeaderType() typetags.Type {
 
 // Write packs the map into a byte buffer in insertion order.
 func (p *PackableMapOrdered) Write(buf []byte, pos int) int {
+	if len(p.om.Keys()) == 0 {
+		return pos
+	}
 	headerSize := len(p.om.Keys())*2*access.HeaderTagSize + access.HeaderTagSize
 	first := pos
 	posH := pos
@@ -284,6 +320,24 @@ func (pack PackMapSorted) PackInto(p *access.PutAccess) {
 }
 
 func (pack PackMapStr) PackInto(p *access.PutAccess) {
+	size := pack.ValueSize()
+	buffer := bPool.Acquire(size)
+	pos := 0
+	pos = pack.Write(buffer, pos)
+	p.AppendTagAndValue(typetags.TypeMap, buffer[:pos])
+	bPool.Release(buffer)
+}
+
+func (pack PackMapStrInt32) PackInto(p *access.PutAccess) {
+	size := pack.ValueSize()
+	buffer := bPool.Acquire(size)
+	pos := 0
+	pos = pack.Write(buffer, pos)
+	p.AppendTagAndValue(typetags.TypeMap, buffer[:pos])
+	bPool.Release(buffer)
+}
+
+func (pack PackMapStrInt64) PackInto(p *access.PutAccess) {
 	size := pack.ValueSize()
 	buffer := bPool.Acquire(size)
 	pos := 0
