@@ -219,10 +219,18 @@ func BuildSchema(js *SchemaJSON) Schema {
 		}
 		return SVariableBytes()
 	case "number":
-
+		var xmin, xmax *float64
+		if js.Min != nil {
+			xret := float64(*js.Min)
+			xmin = &xret
+		}
+		if js.Max != nil {
+			xret := float64(*js.Max)
+			xmax = &xret
+		}
+		return SchemaNumber{false, xmin, xmax}
 	case "any":
 		return SchemaAny{}
-
 	case "tuple":
 		if len(js.FieldNames) > 0 {
 
@@ -279,7 +287,6 @@ func BuildSchema(js *SchemaJSON) Schema {
 		}
 		panic("unknown schema type: " + js.Type)
 	}
-	return SchemaAny{}
 }
 
 // buildSchemas is an internal helper that converts a slice of SchemaJSON
