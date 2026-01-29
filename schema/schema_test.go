@@ -1,4 +1,4 @@
-package scheme
+package schema
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 
 	"github.com/quickwritereader/PackOS/access"
 	pack "github.com/quickwritereader/PackOS/packable"
-	"github.com/quickwritereader/PackOS/types"
+	"github.com/quickwritereader/PackOS/typetags"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +28,7 @@ func TestValidatePackedStructure(t *testing.T) {
 	)
 
 	chain := SChain(
-		SInt16.Range(0, 20000),
+		SInt16.RangeValues(0, 20000),
 		SFloat32,
 		SInt64,
 		SBool,
@@ -111,10 +111,10 @@ func TestValidateUnorderedMap_Failure(t *testing.T) {
 		SBool,
 		SMap(
 			SString.Match("meta"),
-			SMapUnordered(map[string]Scheme{
+			SMapUnordered(map[string]Schema{
 				"user": SBytes(len("alice")),
 				"role": SString.Pattern(`^(admin|guest)$`),
-				"age":  SInt32.Range(18, 99),
+				"age":  SInt32.RangeValues(18, 99),
 			}),
 			SString.Match("name"),
 			SString.WithWidth(len("gopher")),
@@ -149,8 +149,8 @@ func TestValidateUnorderedMap_ShuffledDeclaration_Success(t *testing.T) {
 		SBool,
 		SMap(
 			SString.Match("meta"),
-			SMapUnordered(map[string]Scheme{
-				"age":  SInt32.Range(18, 99),               // declared first
+			SMapUnordered(map[string]Schema{
+				"age":  SInt32.RangeValues(18, 99),         // declared first
 				"user": SBytes(len("alice")),               // declared second
 				"role": SString.Pattern(`^(admin|guest)$`), // declared third
 			}),
@@ -174,7 +174,7 @@ func TestValidateChain_DateEmailPrefixSuffix_Success(t *testing.T) {
 
 	chain := SChain(
 		SString.Pattern(`^\d{4}-\d{2}-\d{2}$`),                              // date pattern YYYY-MM-DD
-		SInt32.Range(1, 100),                                                // int range
+		SInt32.RangeValues(1, 100),                                          // int range
 		SString.Pattern(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`), // email
 		SString.Prefix("prefix-"),                                           // prefix match
 		SString.Suffix("-suffix"),                                           // suffix match
@@ -198,8 +198,8 @@ func TestValidateChain_DateEmailPrefixSuffix_Success2(t *testing.T) {
 	chain := SChain(
 		SEmail(true),                           // optional email (empty allowed)
 		SString.Pattern(`^\d{4}-\d{2}-\d{2}$`), // date pattern YYYY-MM-DD
-		SInt32.Range(1, 100),                   // int range
-		SEmail(false),                          // email scheme (uses net/mail)
+		SInt32.RangeValues(1, 100),             // int range
+		SEmail(false),                          // email schema (uses net/mail)
 		SString.Prefix("prefix-"),              // prefix match
 		SString.Suffix("-suffix"),              // suffix match
 		SString.Optional().Suffix("-suffix"),   // suffix match
@@ -257,7 +257,7 @@ func TestDecodePackedStructure(t *testing.T) {
 	)
 
 	chain := SChain(
-		SInt16.Range(0, 20000),
+		SInt16.RangeValues(0, 20000),
 		SFloat32,
 		SInt64,
 		SBool,
@@ -281,9 +281,9 @@ func TestDecodePackedStructure(t *testing.T) {
 	expectedFloat32 := float32(3.14)
 	expectedInt64 := int64(9876543210)
 	expectedBool := true
-	expectedMeta := types.NewOrderedMapAny(
-		types.OPAny("role", []byte("admin")),
-		types.OPAny("user", []byte("alice")),
+	expectedMeta := typetags.NewOrderedMapAny(
+		typetags.OPAny("role", []byte("admin")),
+		typetags.OPAny("user", []byte("alice")),
 	)
 
 	expectedName := "gopher"
@@ -298,13 +298,13 @@ func TestDecodePackedStructure(t *testing.T) {
 	assert.Equal(t, expectedInt64, resultSlice[2])
 	assert.Equal(t, expectedBool, resultSlice[3])
 	// Check map values without assuming order
-	resultMap, ok := resultSlice[4].(*types.OrderedMapAny)
+	resultMap, ok := resultSlice[4].(*typetags.OrderedMapAny)
 	require.True(t, ok, "Last element should be an OrderedMapAny")
 
 	// Compare "meta" submap
 	metaMap, ok := resultMap.Get("meta")
 	require.True(t, ok, "meta should exist")
-	omMeta, ok := metaMap.(*types.OrderedMapAny)
+	omMeta, ok := metaMap.(*typetags.OrderedMapAny)
 	require.True(t, ok, "meta should be an OrderedMapAny")
 	require.True(t, omMeta.Equal(expectedMeta), "meta OrderedMapAny does not match expected")
 
@@ -328,7 +328,7 @@ func TestDecodePackedMapUnOrderedOptional(t *testing.T) {
 	chain := SChain(
 		SMap(
 			SString.Match("meta"), // key
-			SMapUnorderedOptional(map[string]Scheme{
+			SMapUnorderedOptional(map[string]Schema{
 				"user": SBytes(len("alice")),
 				"role": SString.Pattern(`^(admin|guest)$`),
 			}),
@@ -348,15 +348,15 @@ func TestDecodePackedMapUnOrderedOptional(t *testing.T) {
 	expectedName := "gopher"
 
 	// Top-level result should be an OrderedMapAny
-	resultMap, ok := ret.(*types.OrderedMapAny)
+	resultMap, ok := ret.(*typetags.OrderedMapAny)
 	require.True(t, ok, "element should be an OrderedMapAny")
 
 	// Compare "meta" submap
-	metaMap := types.GetAs[map[string]any](resultMap, "meta")
+	metaMap := typetags.GetAs[map[string]any](resultMap, "meta")
 	assert.EqualValues(t, expectedMeta, metaMap)
 
 	// Compare "name"
-	assert.Equal(t, expectedName, types.GetAs[string](resultMap, "name"))
+	assert.Equal(t, expectedName, typetags.GetAs[string](resultMap, "name"))
 
 }
 
@@ -414,7 +414,7 @@ func TestDecodeChain_DateEmailPrefixSuffix_Success(t *testing.T) {
 
 	chain := SChain(
 		SString.Pattern(`^\d{4}-\d{2}-\d{2}$`),                              // date pattern YYYY-MM-DD
-		SInt32.Range(1, 100),                                                // int range
+		SInt32.RangeValues(1, 100),                                          // int range
 		SString.Pattern(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`), // email
 		SString.Prefix("prefix-"),                                           // prefix match
 		SString.Suffix("-suffix"),                                           // suffix match
@@ -450,7 +450,7 @@ func TestDecodeChain_Default_Success(t *testing.T) {
 
 	chain := SChain(
 		SString.Pattern(`^\d{4}-\d{2}-\d{2}$`), // date pattern YYYY-MM-DD
-		SInt32.Range(1, 100),                   // int range
+		SInt32.RangeValues(1, 100),             // int range
 		SString.DefaultDecodeValue("alice@example.com").Pattern(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`), // email
 		SString.DefaultDecodeValue("prefix-hello").Prefix("prefix-"),                                                // prefix match
 		SString.DefaultDecodeValue("world-suffix").Suffix("-suffix"),                                                // suffix match
@@ -489,8 +489,8 @@ func TestDecodePackedTuplesNamed(t *testing.T) {
 		),
 	)
 
-	chain := SchemeNamedChain{
-		SchemeChain: SChain(
+	chain := SchemaNamedChain{
+		SchemaChain: SChain(
 			STupleNamed(
 				[]string{"year", "flag", "code"},
 				SInt32,
@@ -541,7 +541,7 @@ func TestDecodeSTypeTuple(t *testing.T) {
 
 	// Chain only checks that the next element is a tuple
 	chain := SChain(
-		SType(types.TypeTuple),
+		SType(typetags.TypeTuple),
 	)
 
 	ret, err := DecodeBuffer(actual, chain)
@@ -651,7 +651,7 @@ func TestDecodePackedTuples_WithRepeat(t *testing.T) {
 	)
 
 	ret, err := DecodeBuffer(actual, chain)
-	require.NoError(t, err, "Decoding should succeed with repeat scheme")
+	require.NoError(t, err, "Decoding should succeed with repeat schema")
 
 	// Expected: all tuples decoded
 	expected := []any{
@@ -663,7 +663,7 @@ func TestDecodePackedTuples_WithRepeat(t *testing.T) {
 
 	fmt.Println("Decoded:", ret)
 
-	assert.Equal(t, expected, ret, "Decoder should consume all tuples with repeat scheme")
+	assert.Equal(t, expected, ret, "Decoder should consume all tuples with repeat schema")
 
 }
 
@@ -903,7 +903,7 @@ func TestEncodePackedTuples_WithRepeat(t *testing.T) {
 	}
 
 	actual, err := EncodeValue(val, chain)
-	require.NoError(t, err, "Encoding should succeed with repeat scheme")
+	require.NoError(t, err, "Encoding should succeed with repeat schema")
 
 	fmt.Println("Encoded:", actual)
 
@@ -1038,7 +1038,7 @@ func TestEncodePackedStructure(t *testing.T) {
 
 	// Schema definition
 	chain := SChain(
-		SInt16.Range(0, 20000),
+		SInt16.RangeValues(0, 20000),
 		SFloat32,
 		SInt64,
 		SBool,
@@ -1061,12 +1061,12 @@ func TestEncodePackedStructure(t *testing.T) {
 		float32(3.14),
 		int64(9876543210),
 		true,
-		types.NewOrderedMapAny(
-			types.OPAny("meta", types.NewOrderedMapAny(
-				types.OPAny("role", []byte("admin")),
-				types.OPAny("user", []byte("alice")),
+		typetags.NewOrderedMapAny(
+			typetags.OPAny("meta", typetags.NewOrderedMapAny(
+				typetags.OPAny("role", []byte("admin")),
+				typetags.OPAny("user", []byte("alice")),
 			)),
-			types.OPAny("name", "gopher"),
+			typetags.OPAny("name", "gopher"),
 		),
 	}
 
@@ -1085,10 +1085,10 @@ func TestEncodePackedStructure_WithInvalidValues(t *testing.T) {
 	chain := SChain(
 		SMap(
 			SString.Match("meta"),
-			SMapUnordered(map[string]Scheme{
+			SMapUnordered(map[string]Schema{
 				"user": SBytes(len("alice")),
 				"role": SString.Pattern(`^(admin|guest)$`),
-				"age":  SInt32.Range(18, 99),
+				"age":  SInt32.RangeValues(18, 99),
 			}),
 			SString.Match("name"),
 			SString.WithWidth(len("gopher")),
@@ -1096,13 +1096,13 @@ func TestEncodePackedStructure_WithInvalidValues(t *testing.T) {
 	)
 
 	// Value to encode
-	val := types.NewOrderedMapAny(
-		types.OPAny("meta", map[string]any{
+	val := typetags.NewOrderedMapAny(
+		typetags.OPAny("meta", map[string]any{
 			"user": []byte("alice"),
 			"role": "adminX",  // invalid
 			"age":  int32(17), // out of range
 		}),
-		types.OPAny("name", "gopher"),
+		typetags.OPAny("name", "gopher"),
 	)
 
 	actual, err := EncodeValue(val, chain)
@@ -1119,10 +1119,10 @@ func TestEncodePackedStructure_WithValidValues(t *testing.T) {
 	chain := SChain(
 		SMap(
 			SString.Match("meta"),
-			SMapUnordered(map[string]Scheme{
+			SMapUnordered(map[string]Schema{
 				"user": SBytes(len("alice")),
 				"role": SString.Pattern(`^(admin|guest)$`),
-				"age":  SInt32.Range(18, 99),
+				"age":  SInt32.RangeValues(18, 99),
 			}),
 			SString.Match("name"),
 			SString.WithWidth(len("gopher")),
@@ -1130,13 +1130,13 @@ func TestEncodePackedStructure_WithValidValues(t *testing.T) {
 	)
 
 	// Value to encode
-	val := types.NewOrderedMapAny(
-		types.OPAny("meta", map[string]any{
+	val := typetags.NewOrderedMapAny(
+		typetags.OPAny("meta", map[string]any{
 			"user": []byte("alice"),
 			"role": "admin",
 			"age":  int32(27),
 		}),
-		types.OPAny("name", "gopher"),
+		typetags.OPAny("name", "gopher"),
 	)
 
 	actual, err := EncodeValue(val, chain)
@@ -1168,8 +1168,8 @@ func TestEncodePackedTuplesNamed(t *testing.T) {
 	)
 
 	// Schema with named tuples
-	chain := SchemeNamedChain{
-		SchemeChain: SChain(
+	chain := SchemaNamedChain{
+		SchemaChain: SChain(
 			STupleNamed(
 				[]string{"year", "flag", "code"},
 				SInt32,
@@ -1209,7 +1209,7 @@ func TestEncodePackedTuplesNamed(t *testing.T) {
 		"Encoder should produce packed tuples matching expected buffer")
 }
 
-func TestSchemeMultiCheckNamesScheme(t *testing.T) {
+func TestSchemaMultiCheckNamesSchema(t *testing.T) {
 	// Suppose we have three checkboxes: "read", "write", "execute"
 	fieldNames := []string{"read", "write", "execute"}
 	chain := SChain(
@@ -1238,7 +1238,7 @@ func TestSchemeMultiCheckNamesScheme(t *testing.T) {
 	assert.ElementsMatch(t, expected, selected, "selected names should match expected")
 }
 
-func TestSchemeMultiCheckNamesScheme_Encode(t *testing.T) {
+func TestSchemaMultiCheckNamesSchema_Encode(t *testing.T) {
 	fieldNames := []string{"read", "write", "execute"}
 	chain := SChain(
 		SMultiCheckNames(fieldNames),
@@ -1264,17 +1264,17 @@ func TestSDate_SuccessAndNullable(t *testing.T) {
 	from := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2030, 12, 31, 23, 59, 59, 0, time.UTC)
 
-	// Build scheme
-	dateScheme := SChain(SDate(true, from, to))
+	// Build schema
+	dateSchema := SChain(SDate(true, from, to))
 
 	// Case 1: valid date inside range
 	validDate := time.Date(2025, 9, 10, 0, 0, 0, 0, time.UTC)
 	actual := pack.Pack(pack.PackInt64(validDate.Unix()))
 
-	err := ValidateBuffer(actual, dateScheme)
+	err := ValidateBuffer(actual, dateSchema)
 	require.NoError(t, err, "Validation should succeed for date within range")
 
-	decoded, err := DecodeBuffer(actual, dateScheme)
+	decoded, err := DecodeBuffer(actual, dateSchema)
 	require.NoError(t, err)
 	tt, ok := decoded.(time.Time)
 	require.True(t, ok, "Decoded value should be time.Time")
@@ -1282,20 +1282,20 @@ func TestSDate_SuccessAndNullable(t *testing.T) {
 
 	// Case 2: nullable (nil payload)
 	actualNil := pack.Pack(pack.PackNullableInt64(nil))
-	err = ValidateBuffer(actualNil, dateScheme)
+	err = ValidateBuffer(actualNil, dateSchema)
 	require.NoError(t, err, "Validation should succeed for nil payload")
 
-	decodedNil, err := DecodeBuffer(actualNil, dateScheme)
+	decodedNil, err := DecodeBuffer(actualNil, dateSchema)
 	require.NoError(t, err)
 	require.Nil(t, decodedNil, "Decoded value should be nil for nullable payload")
 
 	// Case 3: out-of-range date
 	invalidDate := time.Date(2050, 1, 1, 0, 0, 0, 0, time.UTC)
 	actualInvalid := pack.Pack(pack.PackInt64(invalidDate.Unix()))
-	err = ValidateBuffer(actualInvalid, dateScheme)
+	err = ValidateBuffer(actualInvalid, dateSchema)
 	require.Error(t, err, "Validation should fail for out-of-range date")
 
-	decodedInvalid, err := DecodeBuffer(actualInvalid, dateScheme)
+	decodedInvalid, err := DecodeBuffer(actualInvalid, dateSchema)
 	require.Error(t, err, "Decode should fail for out-of-range date")
 	require.Nil(t, decodedInvalid)
 }

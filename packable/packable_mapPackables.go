@@ -2,7 +2,7 @@ package packable
 
 import (
 	"github.com/quickwritereader/PackOS/access"
-	"github.com/quickwritereader/PackOS/types"
+	"github.com/quickwritereader/PackOS/typetags"
 	"github.com/quickwritereader/PackOS/utils"
 )
 
@@ -20,8 +20,8 @@ func (p PackMapSorted) ValueSize() int {
 }
 
 // HeaderType returns the type of the header for a map.
-func (p PackMapSorted) HeaderType() types.Type {
-	return types.TypeMap
+func (p PackMapSorted) HeaderType() typetags.Type {
+	return typetags.TypeMap
 }
 
 // Add packs the map into a byte buffer by sorting keys first for a deterministic result.
@@ -34,15 +34,15 @@ func (p PackMapSorted) Write(buf []byte, pos int) int {
 	delta_start := pos
 	for _, k := range keys {
 		v := p[k]
-		posH = access.WriteTypeHeader(buf, posH, pos-delta_start, types.TypeString)
+		posH = access.WriteTypeHeader(buf, posH, pos-delta_start, typetags.TypeString)
 		pos = access.WriteString(buf, pos, k)
 		posH = access.WriteTypeHeader(buf, posH, pos-delta_start, v.HeaderType())
 		pos = v.Write(buf, pos)
 	}
 	// Add the end-of-container marker.
 	//corect first arg with absolute
-	_ = access.WriteTypeHeader(buf, first, headerSize, types.TypeString)
-	_ = access.WriteTypeHeader(buf, posH, pos-delta_start, types.TypeEnd)
+	_ = access.WriteTypeHeader(buf, first, headerSize, typetags.TypeString)
+	_ = access.WriteTypeHeader(buf, posH, pos-delta_start, typetags.TypeEnd)
 	return pos
 }
 
@@ -60,8 +60,8 @@ func (p PackMap) ValueSize() int {
 }
 
 // HeaderType returns the type of the header for a map.
-func (p PackMap) HeaderType() types.Type {
-	return types.TypeMap
+func (p PackMap) HeaderType() typetags.Type {
+	return typetags.TypeMap
 }
 
 // Add packs the map into a byte buffer. This version does not sort keys.
@@ -72,15 +72,15 @@ func (p PackMap) Write(buf []byte, pos int) int {
 	pos += headerSize
 	delta_start := pos
 	for k, v := range p {
-		posH = access.WriteTypeHeader(buf, posH, pos-delta_start, types.TypeString)
+		posH = access.WriteTypeHeader(buf, posH, pos-delta_start, typetags.TypeString)
 		pos = access.WriteString(buf, pos, k)
 		posH = access.WriteTypeHeader(buf, posH, pos-delta_start, v.HeaderType())
 		pos = v.Write(buf, pos)
 	}
 	// Add the end-of-container marker.
 	//correct first arg with absolute
-	_ = access.WriteTypeHeader(buf, first, headerSize, types.TypeString)
-	_ = access.WriteTypeHeader(buf, posH, pos-delta_start, types.TypeEnd)
+	_ = access.WriteTypeHeader(buf, first, headerSize, typetags.TypeString)
+	_ = access.WriteTypeHeader(buf, posH, pos-delta_start, typetags.TypeEnd)
 	return pos
 }
 
@@ -98,8 +98,8 @@ func (p PackMapStr) ValueSize() int {
 }
 
 // HeaderType returns the type of the header for a map.
-func (p PackMapStr) HeaderType() types.Type {
-	return types.TypeMap
+func (p PackMapStr) HeaderType() typetags.Type {
+	return typetags.TypeMap
 }
 
 // Add packs the map into a byte buffer. This version does not sort keys.
@@ -110,15 +110,15 @@ func (p PackMapStr) Write(buf []byte, pos int) int {
 	pos += headerSize
 	delta_start := pos
 	for k, v := range p {
-		posH = access.WriteTypeHeader(buf, posH, pos-delta_start, types.TypeString)
+		posH = access.WriteTypeHeader(buf, posH, pos-delta_start, typetags.TypeString)
 		pos = access.WriteString(buf, pos, k)
-		posH = access.WriteTypeHeader(buf, posH, pos-delta_start, types.TypeString)
+		posH = access.WriteTypeHeader(buf, posH, pos-delta_start, typetags.TypeString)
 		pos = access.WriteString(buf, pos, v)
 	}
 	// Add the end-of-container marker.
 	//correct first arg with absolute
-	_ = access.WriteTypeHeader(buf, first, headerSize, types.TypeString)
-	_ = access.WriteTypeHeader(buf, posH, pos-delta_start, types.TypeEnd)
+	_ = access.WriteTypeHeader(buf, first, headerSize, typetags.TypeString)
+	_ = access.WriteTypeHeader(buf, posH, pos-delta_start, typetags.TypeEnd)
 	return pos
 }
 
@@ -136,8 +136,8 @@ func (p PackMapStrInt32) ValueSize() int {
 }
 
 // HeaderType returns the type of the header for a map.
-func (p PackMapStrInt32) HeaderType() types.Type {
-	return types.TypeMap
+func (p PackMapStrInt32) HeaderType() typetags.Type {
+	return typetags.TypeMap
 }
 
 // Write packs the map into a byte buffer. This version does not sort keys.
@@ -149,15 +149,15 @@ func (p PackMapStrInt32) Write(buf []byte, pos int) int {
 	deltaStart := pos
 
 	for k, v := range p {
-		posH = access.WriteTypeHeader(buf, posH, pos-deltaStart, types.TypeString)
+		posH = access.WriteTypeHeader(buf, posH, pos-deltaStart, typetags.TypeString)
 		pos = access.WriteString(buf, pos, k)
 
-		posH = access.WriteTypeHeader(buf, posH, pos-deltaStart, types.TypeInteger)
+		posH = access.WriteTypeHeader(buf, posH, pos-deltaStart, typetags.TypeInteger)
 		pos = access.WriteInt32(buf, pos, v)
 	}
 
-	_ = access.WriteTypeHeader(buf, first, headerSize, types.TypeString)
-	_ = access.WriteTypeHeader(buf, posH, pos-deltaStart, types.TypeEnd)
+	_ = access.WriteTypeHeader(buf, first, headerSize, typetags.TypeString)
+	_ = access.WriteTypeHeader(buf, posH, pos-deltaStart, typetags.TypeEnd)
 	return pos
 }
 
@@ -175,8 +175,8 @@ func (p PackMapStrInt64) ValueSize() int {
 }
 
 // HeaderType returns the type of the header for a map.
-func (p PackMapStrInt64) HeaderType() types.Type {
-	return types.TypeMap
+func (p PackMapStrInt64) HeaderType() typetags.Type {
+	return typetags.TypeMap
 }
 
 // Write packs the map into a byte buffer. This version does not sort keys.
@@ -188,15 +188,15 @@ func (p PackMapStrInt64) Write(buf []byte, pos int) int {
 	deltaStart := pos
 
 	for k, v := range p {
-		posH = access.WriteTypeHeader(buf, posH, pos-deltaStart, types.TypeString)
+		posH = access.WriteTypeHeader(buf, posH, pos-deltaStart, typetags.TypeString)
 		pos = access.WriteString(buf, pos, k)
 
-		posH = access.WriteTypeHeader(buf, posH, pos-deltaStart, types.TypeInteger)
+		posH = access.WriteTypeHeader(buf, posH, pos-deltaStart, typetags.TypeInteger)
 		pos = access.WriteInt64(buf, pos, v)
 	}
 
-	_ = access.WriteTypeHeader(buf, first, headerSize, types.TypeString)
-	_ = access.WriteTypeHeader(buf, posH, pos-deltaStart, types.TypeEnd)
+	_ = access.WriteTypeHeader(buf, first, headerSize, typetags.TypeString)
+	_ = access.WriteTypeHeader(buf, posH, pos-deltaStart, typetags.TypeEnd)
 	return pos
 }
 
@@ -212,12 +212,12 @@ func PP(key string, value access.Packable) PackPair {
 
 // PackableMapOrdered packs Packable values using OrderedMap to preserve insertion order.
 type PackableMapOrdered struct {
-	om *types.OrderedMap[access.Packable]
+	om *typetags.OrderedMap[access.Packable]
 }
 
 // PackMapOrdered creates a new PackableMapOrdered, optionally initialized with pairs.
 func PackMapOrdered(pairs ...PackPair) *PackableMapOrdered {
-	om := types.NewOrderedMap[access.Packable]()
+	om := typetags.NewOrderedMap[access.Packable]()
 	for _, p := range pairs {
 		om.Set(p.Key, p.Value)
 	}
@@ -239,8 +239,8 @@ func (p *PackableMapOrdered) ValueSize() int {
 }
 
 // HeaderType returns the type of the header for a map.
-func (p *PackableMapOrdered) HeaderType() types.Type {
-	return types.TypeMap
+func (p *PackableMapOrdered) HeaderType() typetags.Type {
+	return typetags.TypeMap
 }
 
 // Write packs the map into a byte buffer in insertion order.
@@ -252,15 +252,15 @@ func (p *PackableMapOrdered) Write(buf []byte, pos int) int {
 	deltaStart := pos
 
 	for k, v := range p.om.ItemsIter() {
-		posH = access.WriteTypeHeader(buf, posH, pos-deltaStart, types.TypeString)
+		posH = access.WriteTypeHeader(buf, posH, pos-deltaStart, typetags.TypeString)
 		pos = access.WriteString(buf, pos, k)
 		posH = access.WriteTypeHeader(buf, posH, pos-deltaStart, v.HeaderType())
 		pos = v.Write(buf, pos)
 	}
 
 	// End-of-container marker
-	_ = access.WriteTypeHeader(buf, first, headerSize, types.TypeString)
-	_ = access.WriteTypeHeader(buf, posH, pos-deltaStart, types.TypeEnd)
+	_ = access.WriteTypeHeader(buf, first, headerSize, typetags.TypeString)
+	_ = access.WriteTypeHeader(buf, posH, pos-deltaStart, typetags.TypeEnd)
 
 	return pos
 }
@@ -270,7 +270,7 @@ func (pack PackMap) PackInto(p *access.PutAccess) {
 	buffer := bPool.Acquire(size)
 	pos := 0
 	pos = pack.Write(buffer, pos)
-	p.AppendTagAndValue(types.TypeMap, buffer[:pos])
+	p.AppendTagAndValue(typetags.TypeMap, buffer[:pos])
 	bPool.Release(buffer)
 }
 
@@ -279,7 +279,7 @@ func (pack PackMapSorted) PackInto(p *access.PutAccess) {
 	buffer := bPool.Acquire(size)
 	pos := 0
 	pos = pack.Write(buffer, pos)
-	p.AppendTagAndValue(types.TypeMap, buffer[:pos])
+	p.AppendTagAndValue(typetags.TypeMap, buffer[:pos])
 	bPool.Release(buffer)
 }
 
@@ -288,7 +288,7 @@ func (pack PackMapStr) PackInto(p *access.PutAccess) {
 	buffer := bPool.Acquire(size)
 	pos := 0
 	pos = pack.Write(buffer, pos)
-	p.AppendTagAndValue(types.TypeMap, buffer[:pos])
+	p.AppendTagAndValue(typetags.TypeMap, buffer[:pos])
 	bPool.Release(buffer)
 }
 
@@ -298,6 +298,6 @@ func (pack *PackableMapOrdered) PackInto(p *access.PutAccess) {
 	buffer := bPool.Acquire(size)
 	pos := 0
 	pos = pack.Write(buffer, pos)
-	p.AppendTagAndValue(types.TypeMap, buffer[:pos])
+	p.AppendTagAndValue(typetags.TypeMap, buffer[:pos])
 	bPool.Release(buffer)
 }

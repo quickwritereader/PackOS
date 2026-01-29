@@ -1,29 +1,27 @@
-package scheme
+package schema
 
 import (
 	"fmt"
 	"time"
 )
 
-type SchemeJSON struct {
+type SchemaJSON struct {
 	Type           string       `json:"type"`
 	FieldNames     []string     `json:"fieldNames,omitempty"`
-	Schema         []SchemeJSON `json:"schema,omitempty"`
-	Min            int          `json:"min,omitempty"`
-	Max            int          `json:"max,omitempty"`
-	Width          int          `json:"width,omitempty"`
+	Schema         []SchemaJSON `json:"schema,omitempty"`
 	Nullable       bool         `json:"nullable,omitempty"`
 	VariableLength bool         `json:"variableLength,omitempty"`
 	Flatten        bool         `json:"flatten,omitempty"`
 	OptionalMap    bool         `json:"optionalMap,omitempty"`
 
 	// Constraint helpers
+	Width         int    `json:"width,omitempty"`
+	Min           *int64 `json:"min,omitempty"`
+	Max           *int64 `json:"max,omitempty"`
 	Exact         string `json:"exact,omitempty"`
 	Prefix        string `json:"prefix,omitempty"`
 	Suffix        string `json:"suffix,omitempty"`
 	Pattern       string `json:"pattern,omitempty"`
-	RangeMin      int64  `json:"rangeMin,omitempty"`
-	RangeMax      int64  `json:"rangeMax,omitempty"`
 	DateFrom      string `json:"dateFrom,omitempty"`
 	DateTo        string `json:"dateTo,omitempty"`
 	DecodeDefault string `json:"decodeDefault,omitempty"`
@@ -32,51 +30,51 @@ type SchemeJSON struct {
 	Extra map[string]any `json:"extra,omitempty"`
 }
 
-// Registry of custom scheme builders.
+// Registry of custom schema builders.
 // Key: type name (case-sensitive), Value: builder function.
-var customSchemeBuilders = map[string]func(SchemeJSON) Scheme{}
+var customSchemaBuilders = map[string]func(*SchemaJSON) Schema{}
 
-// RegisterSchemeType registers a custom Scheme builder for a given type name.
+// RegisterSchemaType registers a custom Schema builder for a given type name.
 //
 // Usage:
 //
-//	scheme.RegisterSchemeType("MyCustomType", func(js scheme.SchemeJSON) scheme.Scheme {
-//	    // Build your own Scheme based on js
+//	schema.RegisterSchemaType("MyCustomType", func(js schema.SchemaJSON) schema.Schema {
+//	    // Build your own Schema based on js
 //	    return SString.WithWidth(js.Width) // or any custom logic
 //	})
 //
 // Notes:
 //   - Type names are case-sensitive ("MyCustomType" ≠ "mycustomtype").
 //   - Panics if the type name is already registered (built-in or custom).
-//   - Use UnregisterSchemeType to remove a custom type.
+//   - Use UnregisterSchemaType to remove a custom type.
 //
-// This allows users to extend BuildScheme with their own types without
+// This allows users to extend BuildSchema with their own typetags without
 // modifying the core switch.
-func RegisterSchemeType(typeName string, builder func(SchemeJSON) Scheme) {
+func RegisterSchemaType(typeName string, builder func(*SchemaJSON) Schema) {
 	if typeName == "" {
 		panic("cannot register empty type name")
 	}
-	if _, exists := customSchemeBuilders[typeName]; exists {
-		panic("scheme type already registered: " + typeName)
+	if _, exists := customSchemaBuilders[typeName]; exists {
+		panic("schema type already registered: " + typeName)
 	}
-	customSchemeBuilders[typeName] = builder
+	customSchemaBuilders[typeName] = builder
 }
 
-// UnregisterSchemeType removes a previously registered custom Scheme builder.
+// UnregisterSchemaType removes a previously registered custom Schema builder.
 //
 // Usage:
 //
-//	scheme.UnregisterSchemeType("MyCustomType")
+//	schema.UnregisterSchemaType("MyCustomType")
 //
 // If the type name is not found, the function does nothing.
-func UnregisterSchemeType(typeName string) {
-	delete(customSchemeBuilders, typeName)
+func UnregisterSchemaType(typeName string) {
+	delete(customSchemaBuilders, typeName)
 }
 
-// BuildScheme constructs a Scheme instance from a SchemeJSON definition.
+// BuildSchema constructs a Schema instance from a SchemaJSON definition.
 //
-// It inspects the `Type` field of the provided SchemeJSON and returns the
-// corresponding Scheme. Built-in types include:
+// It inspects the `Type` field of the provided SchemaJSON and returns the
+// corresponding Schema. Built-in typetags include:
 //
 //   - "bool"       → SBool / SNullBool
 //   - "int8"       → SInt8 / SNullInt8
@@ -101,30 +99,34 @@ func UnregisterSchemeType(typeName string) {
 //   - "enum"       → SEnum
 //   - "color"      → SColor
 //
-// If the type is not recognized, BuildScheme checks the custom registry
-// (see RegisterSchemeType) before panicking.
+// If the type is not recognized, BuildSchema checks the custom registry
+// (see RegisterSchemaType) before panicking.
 //
 // Usage:
 //
-//	js := SchemeJSON{Type: "string", Width: 20, Prefix: "ID_"}
-//	s := BuildScheme(js)
+//	js := SchemaJSON{Type: "string", Width: 20, Prefix: "ID_"}
+//	s := BuildSchema(js)
 //	s now validates strings up to 20 chars starting with "ID_"
 //
 // Custom type example:
 //
-//	scheme.RegisterSchemeType("MyCustomType", func(js scheme.SchemeJSON) scheme.Scheme {
+//	schema.RegisterSchemaType("MyCustomType", func(js schema.SchemaJSON) schema.Schema {
 //	    return SString.Pattern("[A-Z]{3}[0-9]{2}")
 //	})
-//	custom := BuildScheme(SchemeJSON{Type: "MyCustomType"})
+//	custom := BuildSchema(SchemaJSON{Type: "MyCustomType"})
 //
 // Notes:
 //   - Type names are case-sensitive.
 //   - Nullable fields are respected where applicable.
-//   - RangeMin/RangeMax apply to numeric types.
+//   - Min/Max apply to numeric typetags.
 //   - DateFrom/DateTo must be RFC3339 strings.
 //   - For "mapUnordered", FieldNames and Schema must align in length.
 //   - For "mapRepeat", Schema must contain exactly two entries.
-func BuildScheme(js SchemeJSON) Scheme {
+func BuildSchema(js *SchemaJSON) Schema {
+	if js == nil {
+		panic("nil schema")
+
+	}
 	switch js.Type {
 	case "bool":
 		if js.Nullable {
@@ -141,8 +143,8 @@ func BuildScheme(js SchemeJSON) Scheme {
 		if js.Nullable {
 			s.Nullable = true
 		}
-		if js.RangeMin != 0 || js.RangeMax != 0 {
-			return s.Range(int16(js.RangeMin), int16(js.RangeMax))
+		if js.Min != nil || js.Max != nil {
+			return s.Range(js.Min, js.Max)
 		}
 		return s
 	case "int32":
@@ -150,8 +152,8 @@ func BuildScheme(js SchemeJSON) Scheme {
 		if js.Nullable {
 			s.Nullable = true
 		}
-		if js.RangeMin != 0 || js.RangeMax != 0 {
-			return s.Range(int32(js.RangeMin), int32(js.RangeMax))
+		if js.Min != nil || js.Max != nil {
+			return s.Range(js.Min, js.Max)
 		}
 		return s
 	case "int64":
@@ -159,17 +161,17 @@ func BuildScheme(js SchemeJSON) Scheme {
 		if js.Nullable {
 			s.Nullable = true
 		}
-		if js.RangeMin != 0 || js.RangeMax != 0 {
-			return s.Range(js.RangeMin, js.RangeMax)
+		if js.Min != nil || js.Max != nil {
+			return s.Range(js.Min, js.Max)
 		}
 		return s
 	case "date":
 		if js.DateFrom != "" && js.DateTo != "" {
 			from, _ := time.Parse(time.RFC3339, js.DateFrom)
 			to, _ := time.Parse(time.RFC3339, js.DateTo)
-			return SDate(js.Nullable, from, to)
+			return SDateRange(js.Nullable, &from, &to)
 		}
-		return SDate(js.Nullable, time.Unix(0, 0), time.Unix(1<<63-1, 0))
+		return SDateRange(js.Nullable, nil, nil)
 	case "float32":
 		if js.Nullable {
 			return SNullFloat32
@@ -216,8 +218,10 @@ func BuildScheme(js SchemeJSON) Scheme {
 			return SBytes(js.Width)
 		}
 		return SVariableBytes()
+	case "number":
+
 	case "any":
-		return SAny
+		return SchemaAny{}
 
 	case "tuple":
 		if len(js.FieldNames) > 0 {
@@ -237,14 +241,14 @@ func BuildScheme(js SchemeJSON) Scheme {
 		}
 		return STuple(buildSchemas(js.Schema)...)
 	case "repeat":
-		return SRepeat(js.Min, js.Max, buildSchemas(js.Schema)...)
+		return SRepeatRange(js.Min, js.Max, buildSchemas(js.Schema)...)
 
 	case "map":
 		return SMap(buildSchemas(js.Schema)...)
 	case "mapUnordered":
-		mapped := make(map[string]Scheme)
-		for i, sub := range js.Schema {
-			mapped[js.FieldNames[i]] = BuildScheme(sub)
+		mapped := make(map[string]Schema)
+		for i := range js.Schema {
+			mapped[js.FieldNames[i]] = BuildSchema(&js.Schema[i])
 		}
 		if js.OptionalMap {
 			return SMapUnorderedOptional(mapped)
@@ -252,9 +256,9 @@ func BuildScheme(js SchemeJSON) Scheme {
 		return SMapUnordered(mapped)
 	case "mapRepeat":
 		if len(js.Schema) == 2 {
-			return SMapRepeatRange(BuildScheme(js.Schema[0]), BuildScheme(js.Schema[1]), js.Min, js.Max)
+			return SMapRepeatRange(BuildSchema(&js.Schema[0]), BuildSchema(&js.Schema[1]), js.Min, js.Max)
 		} else {
-			panic(fmt.Sprintf("should be 2 schemes %v", len(js.FieldNames)))
+			panic(fmt.Sprintf("should be 2 schemas %v", len(js.FieldNames)))
 		}
 	case "multicheck":
 		if len(js.FieldNames) > 0 {
@@ -270,21 +274,22 @@ func BuildScheme(js SchemeJSON) Scheme {
 		return SColor(js.Nullable)
 	default:
 		// Check custom registry before panicking
-		if builder, ok := customSchemeBuilders[js.Type]; ok {
+		if builder, ok := customSchemaBuilders[js.Type]; ok {
 			return builder(js)
 		}
-		panic("unknown scheme type: " + js.Type)
+		panic("unknown schema type: " + js.Type)
 	}
+	return SchemaAny{}
 }
 
-// buildSchemas is an internal helper that converts a slice of SchemeJSON
-// definitions into a slice of Scheme instances by delegating to BuildScheme.
+// buildSchemas is an internal helper that converts a slice of SchemaJSON
+// definitions into a slice of Schema instances by delegating to BuildSchema.
 // It preserves the order of the input list and is primarily used by composite
-// types (tuple, map, repeat, etc.) when constructing nested schemas.
-func buildSchemas(list []SchemeJSON) []Scheme {
-	out := make([]Scheme, len(list))
-	for i, sub := range list {
-		out[i] = BuildScheme(sub)
+// typetags (tuple, map, repeat, etc.) when constructing nested schemas.
+func buildSchemas(list []SchemaJSON) []Schema {
+	out := make([]Schema, len(list))
+	for i := range list {
+		out[i] = BuildSchema(&list[i])
 	}
 	return out
 }

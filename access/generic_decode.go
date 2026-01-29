@@ -5,16 +5,16 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/quickwritereader/PackOS/types"
+	"github.com/quickwritereader/PackOS/typetags"
 )
 
 // DecodePrimitive interprets a primitive payload directly using type tag and width.
 // It returns a Go value (int, float, string, []byte as string, bool, nil).
-func DecodePrimitive(typ types.Type, buf []byte) (interface{}, error) {
+func DecodePrimitive(typ typetags.Type, buf []byte) (interface{}, error) {
 	size := len(buf)
 
 	switch typ {
-	case types.TypeInteger:
+	case typetags.TypeInteger:
 		switch size {
 		case 0:
 			return nil, nil
@@ -30,7 +30,7 @@ func DecodePrimitive(typ types.Type, buf []byte) (interface{}, error) {
 			return nil, fmt.Errorf("DecodePrimitive: unsupported integer size %d", size)
 		}
 
-	case types.TypeFloating:
+	case typetags.TypeFloating:
 		switch size {
 		case 0:
 			return nil, nil
@@ -44,16 +44,16 @@ func DecodePrimitive(typ types.Type, buf []byte) (interface{}, error) {
 			return nil, fmt.Errorf("DecodePrimitive: unsupported float size %d", size)
 		}
 
-	case types.TypeString:
+	case typetags.TypeString:
 		return string(buf), nil
 
-	case types.TypeBool:
+	case typetags.TypeBool:
 		if size != 1 {
 			return nil, fmt.Errorf("DecodePrimitive: invalid bool size %d", size)
 		}
 		return buf[0] != 0, nil
 
-	case types.TypeNull:
+	case typetags.TypeNull:
 		return nil, nil
 
 	default:
@@ -63,7 +63,7 @@ func DecodePrimitive(typ types.Type, buf []byte) (interface{}, error) {
 
 // DecodeTupleGeneric: decode a []any from the current position in a SeqGetAccess.
 // If root is true, the caller already consumed the tuple header.
-// If ordered is true, maps inside the tuple are decoded as *types.OrderedMapAny.
+// If ordered is true, maps inside the tuple are decoded as *typetags.OrderedMapAny.
 func DecodeTupleGeneric(seq *SeqGetAccess, root bool, ordered bool) ([]any, error) {
 	nested := seq
 	if !root {
@@ -72,8 +72,8 @@ func DecodeTupleGeneric(seq *SeqGetAccess, root bool, ordered bool) ([]any, erro
 		if err != nil {
 			return nil, fmt.Errorf("DecodeTuple: peek failed at pos %d: %w", pos, err)
 		}
-		if typ != types.TypeTuple {
-			return nil, fmt.Errorf("DecodeTuple: type mismatch at pos %d — expected %v, got %v", pos, types.TypeTuple, typ)
+		if typ != typetags.TypeTuple {
+			return nil, fmt.Errorf("DecodeTuple: type mismatch at pos %d — expected %v, got %v", pos, typetags.TypeTuple, typ)
 		}
 		if width == 0 {
 			// nil/empty tuple
@@ -95,7 +95,7 @@ func DecodeTupleGeneric(seq *SeqGetAccess, root bool, ordered bool) ([]any, erro
 			return nil, fmt.Errorf("DecodeTuple: nested value peek error at %d: %w", i, err)
 		}
 		switch valTyp {
-		case types.TypeMap:
+		case typetags.TypeMap:
 			var v any
 			if ordered {
 				v, err = DecodeOrderedMapAny(nested)
@@ -107,7 +107,7 @@ func DecodeTupleGeneric(seq *SeqGetAccess, root bool, ordered bool) ([]any, erro
 			}
 			out = append(out, v)
 
-		case types.TypeTuple:
+		case typetags.TypeTuple:
 			v, err := DecodeTuple(nested)
 			if err != nil {
 				return nil, fmt.Errorf("DecodeTuple: nested tuple decode error at %d: %w", i, err)
@@ -151,8 +151,8 @@ func DecodeMapAny(seq *SeqGetAccess) (map[string]any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("DecodeMapAny: peek failed at pos %d: %w", pos, err)
 	}
-	if typ != types.TypeMap {
-		return nil, fmt.Errorf("DecodeMapAny: type mismatch at pos %d — expected %v, got %v", pos, types.TypeMap, typ)
+	if typ != typetags.TypeMap {
+		return nil, fmt.Errorf("DecodeMapAny: type mismatch at pos %d — expected %v, got %v", pos, typetags.TypeMap, typ)
 	}
 	if width == 0 {
 		// nil/empty map
@@ -174,7 +174,7 @@ func DecodeMapAny(seq *SeqGetAccess) (map[string]any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("DecodeMapAny: key decode error at %d: %w", i, err)
 		}
-		if keyTyp != types.TypeString {
+		if keyTyp != typetags.TypeString {
 			return nil, fmt.Errorf("DecodeMapAny: map key not string at %d, got %v", i, keyTyp)
 		}
 		key := string(keyPayload)
@@ -185,13 +185,13 @@ func DecodeMapAny(seq *SeqGetAccess) (map[string]any, error) {
 
 		}
 		switch valTyp {
-		case types.TypeMap:
+		case typetags.TypeMap:
 			v, err := DecodeMapAny(nested) // delegate
 			if err != nil {
 				return nil, fmt.Errorf("DecodeMapAny: nested value decode error at %d: %w", i+1, err)
 			}
 			out[key] = v
-		case types.TypeTuple:
+		case typetags.TypeTuple:
 			v, err := DecodeTuple(nested) // delegate
 			if err != nil {
 				return nil, fmt.Errorf("DecodeMapAny: nested value decode error at %d: %w", i+1, err)
@@ -219,14 +219,14 @@ func DecodeMapAny(seq *SeqGetAccess) (map[string]any, error) {
 
 // DecodeOrderedMapAny decodes a map from the sequence into an OrderedMapAny,
 // preserving insertion order of keys.
-func DecodeOrderedMapAny(seq *SeqGetAccess) (*types.OrderedMapAny, error) {
+func DecodeOrderedMapAny(seq *SeqGetAccess) (*typetags.OrderedMapAny, error) {
 	pos := seq.CurrentIndex()
 	typ, width, err := seq.PeekTypeWidth()
 	if err != nil {
 		return nil, fmt.Errorf("DecodeOrderedMapAny: peek failed at pos %d: %w", pos, err)
 	}
-	if typ != types.TypeMap {
-		return nil, fmt.Errorf("DecodeOrderedMapAny: type mismatch at pos %d — expected %v, got %v", pos, types.TypeMap, typ)
+	if typ != typetags.TypeMap {
+		return nil, fmt.Errorf("DecodeOrderedMapAny: type mismatch at pos %d — expected %v, got %v", pos, typetags.TypeMap, typ)
 	}
 	if width == 0 {
 		// nil/empty map
@@ -241,14 +241,14 @@ func DecodeOrderedMapAny(seq *SeqGetAccess) (*types.OrderedMapAny, error) {
 		return nil, fmt.Errorf("DecodeOrderedMapAny: nested peek failed at pos %d: %w", pos, err)
 	}
 
-	out := types.NewOrderedMapAny()
+	out := typetags.NewOrderedMapAny()
 	for i := 0; i < nested.ArgCount(); i += 2 {
 		// key
 		keyPayload, keyTyp, err := nested.Next()
 		if err != nil {
 			return nil, fmt.Errorf("DecodeOrderedMapAny: key decode error at %d: %w", i, err)
 		}
-		if keyTyp != types.TypeString {
+		if keyTyp != typetags.TypeString {
 			return nil, fmt.Errorf("DecodeOrderedMapAny: map key not string at %d, got %v", i, keyTyp)
 		}
 		key := string(keyPayload)
@@ -259,14 +259,14 @@ func DecodeOrderedMapAny(seq *SeqGetAccess) (*types.OrderedMapAny, error) {
 		}
 
 		switch valTyp {
-		case types.TypeMap:
+		case typetags.TypeMap:
 			v, err := DecodeOrderedMapAny(nested) // delegate recursively
 			if err != nil {
 				return nil, fmt.Errorf("DecodeOrderedMapAny: nested value decode error at %d: %w", i+1, err)
 			}
 			out.Set(key, v)
 
-		case types.TypeTuple:
+		case typetags.TypeTuple:
 			v, err := DecodeTuple(nested)
 			if err != nil {
 				return nil, fmt.Errorf("DecodeOrderedMapAny: nested value decode error at %d: %w", i+1, err)
@@ -312,7 +312,7 @@ func Decode(buf []byte) (any, error) {
 }
 
 // DecodeOrdered decodes a buffer into Go values.
-// Maps inside tuples are decoded as *types.OrderedMapAny.
+// Maps inside tuples are decoded as *typetags.OrderedMapAny.
 func DecodeOrdered(buf []byte) (any, error) {
 	seq, err := NewSeqGetAccess(buf)
 	if err != nil {

@@ -7,7 +7,7 @@ import (
 	"math"
 	"unsafe"
 
-	"github.com/quickwritereader/PackOS/types"
+	"github.com/quickwritereader/PackOS/typetags"
 )
 
 type GetAccess struct {
@@ -21,7 +21,7 @@ func NewGetAccess(buf []byte) *GetAccess {
 		return nil // not enough to decode base header
 	}
 
-	base, _ := types.DecodeHeader(binary.LittleEndian.Uint16(buf[0:]))
+	base, _ := typetags.DecodeHeader(binary.LittleEndian.Uint16(buf[0:]))
 	count := base/2 - 1
 	if len(buf) < base {
 		return nil // buffer too short for declared header count
@@ -35,17 +35,17 @@ func NewGetAccess(buf []byte) *GetAccess {
 }
 
 // rangeAt returns absolute start and end offsets for field at pos
-func (g *GetAccess) rangeAt(pos int) (tp types.Type, start, end int) {
+func (g *GetAccess) rangeAt(pos int) (tp typetags.Type, start, end int) {
 
 	if pos >= g.argCount {
-		return types.TypeEnd, -2, -1
+		return typetags.TypeEnd, -2, -1
 	}
 
 	h1 := binary.LittleEndian.Uint16(g.buf[pos*2:])
 	h2 := binary.LittleEndian.Uint16(g.buf[(pos+1)*2:])
 
-	start, tp = types.DecodeHeader(h1)
-	end = types.DecodeOffset(h2) + g.base
+	start, tp = typetags.DecodeHeader(h1)
+	end = typetags.DecodeOffset(h2) + g.base
 
 	if pos > 0 {
 		start += g.base
@@ -59,7 +59,7 @@ func (g *GetAccess) rangeAt(pos int) (tp types.Type, start, end int) {
 
 func (g *GetAccess) GetBool(pos int) (bool, error) {
 	tp, start, end := g.rangeAt(pos)
-	if tp != types.TypeBool || end-start != 1 {
+	if tp != typetags.TypeBool || end-start != 1 {
 		return false, errors.New("decode error")
 	}
 	return g.buf[start] != 0, nil
@@ -70,7 +70,7 @@ func (g *GetAccess) GetNullableBool(pos int) (*bool, error) {
 	if end-start == 0 {
 		return nil, nil
 	}
-	if tp != types.TypeBool || end-start != 1 {
+	if tp != typetags.TypeBool || end-start != 1 {
 		return nil, errors.New("decode error")
 	}
 	v := g.buf[start] != 0
@@ -79,7 +79,7 @@ func (g *GetAccess) GetNullableBool(pos int) (*bool, error) {
 
 func (g *GetAccess) GetInt8(pos int) (int8, error) {
 	tp, start, end := g.rangeAt(pos)
-	if tp != types.TypeInteger || end-start != 1 {
+	if tp != typetags.TypeInteger || end-start != 1 {
 		return 0, errors.New("decode error")
 	}
 	return int8(g.buf[start]), nil
@@ -87,7 +87,7 @@ func (g *GetAccess) GetInt8(pos int) (int8, error) {
 
 func (g *GetAccess) GetUint8(pos int) (uint8, error) {
 	tp, start, end := g.rangeAt(pos)
-	if tp != types.TypeInteger || end-start != 1 {
+	if tp != typetags.TypeInteger || end-start != 1 {
 		return 0, errors.New("decode error")
 	}
 	return g.buf[start], nil
@@ -98,7 +98,7 @@ func (g *GetAccess) GetNullableInt8(pos int) (*int8, error) {
 	if end-start == 0 {
 		return nil, nil
 	}
-	if tp != types.TypeInteger || end-start != 1 {
+	if tp != typetags.TypeInteger || end-start != 1 {
 		return nil, errors.New("decode error")
 	}
 	v := int8(g.buf[start])
@@ -110,7 +110,7 @@ func (g *GetAccess) GetNullableUint8(pos int) (*uint8, error) {
 	if end-start == 0 {
 		return nil, nil
 	}
-	if tp != types.TypeInteger || end-start != 1 {
+	if tp != typetags.TypeInteger || end-start != 1 {
 		return nil, errors.New("decode error")
 	}
 	v := g.buf[start]
@@ -121,7 +121,7 @@ func (g *GetAccess) GetInt(pos int) (any, int, error) {
 	tp, start, end := g.rangeAt(pos)
 	size := end - start
 
-	if tp != types.TypeInteger {
+	if tp != typetags.TypeInteger {
 		return 0, 0, fmt.Errorf("GetInt decode error: not integer type")
 	}
 
@@ -149,7 +149,7 @@ func (g *GetAccess) GetFloating(pos int) (any, int, error) {
 	tp, start, end := g.rangeAt(pos)
 	size := end - start
 
-	if tp != types.TypeFloating {
+	if tp != typetags.TypeFloating {
 		return 0, 0, fmt.Errorf("GetInt decode error: not floating type")
 	}
 
@@ -172,7 +172,7 @@ func (g *GetAccess) GetFloating(pos int) (any, int, error) {
 // GetUint16 decodes a uint16 at position pos
 func (g *GetAccess) GetUint16(pos int) (uint16, error) {
 	tp, start, end := g.rangeAt(pos)
-	if tp != types.TypeInteger || end-start != 2 {
+	if tp != typetags.TypeInteger || end-start != 2 {
 		return 0, errors.New("decode error")
 	}
 	return binary.LittleEndian.Uint16(g.buf[start:end]), nil
@@ -181,7 +181,7 @@ func (g *GetAccess) GetUint16(pos int) (uint16, error) {
 // GetUint32 decodes a uint32 at position pos
 func (g *GetAccess) GetUint32(pos int) (uint32, error) {
 	tp, start, end := g.rangeAt(pos)
-	if tp != types.TypeInteger || end-start != 4 {
+	if tp != typetags.TypeInteger || end-start != 4 {
 		return 0, errors.New("decode error")
 	}
 	return binary.LittleEndian.Uint32(g.buf[start:end]), nil
@@ -190,7 +190,7 @@ func (g *GetAccess) GetUint32(pos int) (uint32, error) {
 // GetUint64 decodes a uint64 at position pos
 func (g *GetAccess) GetUint64(pos int) (uint64, error) {
 	tp, start, end := g.rangeAt(pos)
-	if tp != types.TypeInteger || end-start != 8 {
+	if tp != typetags.TypeInteger || end-start != 8 {
 		return 0, errors.New("decode error")
 	}
 	return binary.LittleEndian.Uint64(g.buf[start:end]), nil
@@ -216,7 +216,7 @@ func (g *GetAccess) GetNullableUint16(pos int) (*uint16, error) {
 	if end-start == 0 {
 		return nil, nil
 	}
-	if tp != types.TypeInteger || end-start != 2 {
+	if tp != typetags.TypeInteger || end-start != 2 {
 		return nil, errors.New("decode error")
 	}
 	v := binary.LittleEndian.Uint16(g.buf[start:end])
@@ -228,7 +228,7 @@ func (g *GetAccess) GetNullableUint32(pos int) (*uint32, error) {
 	if end-start == 0 {
 		return nil, nil
 	}
-	if tp != types.TypeInteger || end-start != 4 {
+	if tp != typetags.TypeInteger || end-start != 4 {
 		return nil, errors.New("decode error")
 	}
 	v := binary.LittleEndian.Uint32(g.buf[start:end])
@@ -240,7 +240,7 @@ func (g *GetAccess) GetNullableUint64(pos int) (*uint64, error) {
 	if end-start == 0 {
 		return nil, nil
 	}
-	if tp != types.TypeInteger || end-start != 8 {
+	if tp != typetags.TypeInteger || end-start != 8 {
 		return nil, errors.New("decode error")
 	}
 	v := binary.LittleEndian.Uint64(g.buf[start:end])
@@ -252,7 +252,7 @@ func (g *GetAccess) GetNullableInt16(pos int) (*int16, error) {
 	if end-start == 0 {
 		return nil, nil
 	}
-	if tp != types.TypeInteger || end-start != 2 {
+	if tp != typetags.TypeInteger || end-start != 2 {
 		return nil, errors.New("decode error")
 	}
 	v := int16(binary.LittleEndian.Uint16(g.buf[start:end]))
@@ -264,7 +264,7 @@ func (g *GetAccess) GetNullableInt32(pos int) (*int32, error) {
 	if end-start == 0 {
 		return nil, nil
 	}
-	if tp != types.TypeInteger || end-start != 4 {
+	if tp != typetags.TypeInteger || end-start != 4 {
 		return nil, errors.New("decode error")
 	}
 	v := int32(binary.LittleEndian.Uint32(g.buf[start:end]))
@@ -276,7 +276,7 @@ func (g *GetAccess) GetNullableInt64(pos int) (*int64, error) {
 	if end-start == 0 {
 		return nil, nil
 	}
-	if tp != types.TypeInteger || end-start != 8 {
+	if tp != typetags.TypeInteger || end-start != 8 {
 		return nil, errors.New("decode error")
 	}
 	v := int64(binary.LittleEndian.Uint64(g.buf[start:end]))
@@ -286,7 +286,7 @@ func (g *GetAccess) GetNullableInt64(pos int) (*int64, error) {
 // GetFloat32 decodes a float32 at position pos
 func (g *GetAccess) GetFloat32(pos int) (float32, error) {
 	tp, start, end := g.rangeAt(pos)
-	if tp != types.TypeFloating || end-start != 4 {
+	if tp != typetags.TypeFloating || end-start != 4 {
 		return 0, errors.New("decode error")
 	}
 	bits := binary.LittleEndian.Uint32(g.buf[start:end])
@@ -296,7 +296,7 @@ func (g *GetAccess) GetFloat32(pos int) (float32, error) {
 // GetFloat64 decodes a float64 at position pos
 func (g *GetAccess) GetFloat64(pos int) (float64, error) {
 	tp, start, end := g.rangeAt(pos)
-	if tp != types.TypeFloating || end-start != 8 {
+	if tp != typetags.TypeFloating || end-start != 8 {
 		return 0, errors.New("decode error")
 	}
 	bits := binary.LittleEndian.Uint64(g.buf[start:end])
@@ -309,7 +309,7 @@ func (g *GetAccess) GetNullableFloat32(pos int) (*float32, error) {
 	if end-start == 0 {
 		return nil, nil
 	}
-	if tp != types.TypeFloating || end-start != 4 {
+	if tp != typetags.TypeFloating || end-start != 4 {
 		return nil, errors.New("decode error")
 	}
 	bits := binary.LittleEndian.Uint32(g.buf[start:end])
@@ -323,7 +323,7 @@ func (g *GetAccess) GetNullableFloat64(pos int) (*float64, error) {
 	if end-start == 0 {
 		return nil, nil
 	}
-	if tp != types.TypeFloating || end-start != 8 {
+	if tp != typetags.TypeFloating || end-start != 8 {
 		return nil, errors.New("decode error")
 	}
 	bits := binary.LittleEndian.Uint64(g.buf[start:end])
@@ -334,7 +334,7 @@ func (g *GetAccess) GetNullableFloat64(pos int) (*float64, error) {
 // GetBytes decodes a byte slice at position pos
 func (g *GetAccess) GetBytes(pos int) ([]byte, error) {
 	tp, start, end := g.rangeAt(pos)
-	if tp != types.TypeByteArray || end < start {
+	if tp != typetags.TypeByteArray || end < start {
 		return nil, errors.New("decode error")
 	}
 	return g.buf[start:end], nil
@@ -343,7 +343,7 @@ func (g *GetAccess) GetBytes(pos int) ([]byte, error) {
 // GetString decodes a string at position pos
 func (g *GetAccess) GetString(pos int) (string, error) {
 	tp, start, end := g.rangeAt(pos)
-	if end < start || tp != types.TypeString {
+	if end < start || tp != typetags.TypeString {
 		return "", errors.New("decode error")
 	}
 	return string(g.buf[start:end]), nil
@@ -352,7 +352,7 @@ func (g *GetAccess) GetString(pos int) (string, error) {
 // GetStringUnsafe decodes a string at position pos using unsafe.String
 func (g *GetAccess) GetStringUnsafe(pos int) (string, error) {
 	tp, start, end := g.rangeAt(pos)
-	if tp != types.TypeString || end < start {
+	if tp != typetags.TypeString || end < start {
 		return "", errors.New("decode error")
 	}
 	return unsafe.String(&g.buf[start], end-start), nil
@@ -360,10 +360,10 @@ func (g *GetAccess) GetStringUnsafe(pos int) (string, error) {
 
 func GetAny(g *GetAccess, pos int) (any, error) {
 	h := binary.LittleEndian.Uint16(g.buf[pos*2:])
-	_, typ := types.DecodeHeader(h)
+	_, typ := typetags.DecodeHeader(h)
 
 	switch typ {
-	case types.TypeInteger:
+	case typetags.TypeInteger:
 		v, size, err := g.GetInt(pos)
 		if err != nil {
 			return nil, err
@@ -373,7 +373,7 @@ func GetAny(g *GetAccess, pos int) (any, error) {
 		}
 		return v, nil
 
-	case types.TypeFloating:
+	case typetags.TypeFloating:
 		v, size, err := g.GetFloating(pos)
 		if err != nil {
 			return nil, err
@@ -382,10 +382,10 @@ func GetAny(g *GetAccess, pos int) (any, error) {
 			return nil, nil
 		}
 		return v, nil
-	case types.TypeString:
+	case typetags.TypeString:
 		return g.GetString(pos)
 
-	case types.TypeMap:
+	case typetags.TypeMap:
 		return g.GetMapAny(pos)
 
 	default:
@@ -395,7 +395,7 @@ func GetAny(g *GetAccess, pos int) (any, error) {
 
 func (g *GetAccess) GetMapAny(pos int) (map[string]any, error) {
 	tp, start, end := g.rangeAt(pos)
-	if end < start || tp != types.TypeMap {
+	if end < start || tp != typetags.TypeMap {
 		return nil, errors.New("decode error")
 	}
 	if end == start {
@@ -421,9 +421,9 @@ func (g *GetAccess) GetMapAny(pos int) (map[string]any, error) {
 
 // GetMapOrderedAny decodes a map at the given position into an OrderedMapAny,
 // preserving insertion order of keys.
-func (g *GetAccess) GetMapOrderedAny(pos int) (*types.OrderedMapAny, error) {
+func (g *GetAccess) GetMapOrderedAny(pos int) (*typetags.OrderedMapAny, error) {
 	tp, start, end := g.rangeAt(pos)
-	if end < start || tp != types.TypeMap {
+	if end < start || tp != typetags.TypeMap {
 		return nil, errors.New("decode error")
 	}
 	if end == start {
@@ -431,7 +431,7 @@ func (g *GetAccess) GetMapOrderedAny(pos int) (*types.OrderedMapAny, error) {
 	}
 
 	nested := NewGetAccess(g.buf[start:end])
-	out := types.NewOrderedMapAny()
+	out := typetags.NewOrderedMapAny()
 
 	for i := 0; i < nested.argCount; i += 2 {
 		key, err := nested.GetString(i)
@@ -449,7 +449,7 @@ func (g *GetAccess) GetMapOrderedAny(pos int) (*types.OrderedMapAny, error) {
 
 func (g *GetAccess) GetMapStr(pos int) (map[string]string, error) {
 	tp, start, end := g.rangeAt(pos)
-	if end < start || tp != types.TypeMap {
+	if end < start || tp != typetags.TypeMap {
 		return nil, errors.New("decode error")
 	}
 	if end == start {
@@ -473,9 +473,9 @@ func (g *GetAccess) GetMapStr(pos int) (map[string]string, error) {
 	return out, nil
 }
 
-func (g *GetAccess) GetNestedGetAccess(pos int) (*GetAccess, types.Type, error) {
+func (g *GetAccess) GetNestedGetAccess(pos int) (*GetAccess, typetags.Type, error) {
 	tp, start, end := g.rangeAt(pos)
-	if end < start || (tp != types.TypeMap && tp != types.TypeTuple) {
+	if end < start || (tp != typetags.TypeMap && tp != typetags.TypeTuple) {
 		return nil, tp, errors.New("decode error: it's not nested type")
 	}
 	if end == start {

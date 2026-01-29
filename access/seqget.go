@@ -5,18 +5,18 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/quickwritereader/PackOS/types"
+	"github.com/quickwritereader/PackOS/typetags"
 )
 
 type SeqGetAccess struct {
-	buf           []byte     // full packed buffer
-	count         int        // number of args (typeEnd included)
-	base          int        // payload start offset
-	pos           int        // current field index
-	nextOffset    int        // absolute offset of next field start
-	nextType      types.Type // decoded type tag of next field
-	currentOffset int        // absolute offset of last field start
-	currentType   types.Type // decoded type tag of last field
+	buf           []byte        // full packed buffer
+	count         int           // number of args (typeEnd included)
+	base          int           // payload start offset
+	pos           int           // current field index
+	nextOffset    int           // absolute offset of next field start
+	nextType      typetags.Type // decoded type tag of next field
+	currentOffset int           // absolute offset of last field start
+	currentType   typetags.Type // decoded type tag of last field
 }
 
 func NewSeqGetAccess(buf []byte) (*SeqGetAccess, error) {
@@ -24,14 +24,14 @@ func NewSeqGetAccess(buf []byte) (*SeqGetAccess, error) {
 		return nil, errors.New("insufficient header")
 	}
 
-	base, ct := types.DecodeHeader(binary.LittleEndian.Uint16(buf[0:]))
+	base, ct := typetags.DecodeHeader(binary.LittleEndian.Uint16(buf[0:]))
 	count := base / 2
 	if len(buf) < base {
 		return nil, errors.New("insufficient header")
 	}
 
 	h := binary.LittleEndian.Uint16(buf[2:])
-	offset, nt := types.DecodeHeader(h)
+	offset, nt := typetags.DecodeHeader(h)
 	next := offset + base
 
 	return &SeqGetAccess{
@@ -58,7 +58,7 @@ func (s *SeqGetAccess) CurrentIndex() int {
 	return s.pos
 }
 
-func (s *SeqGetAccess) PeekTypeWidth() (types.Type, int, error) {
+func (s *SeqGetAccess) PeekTypeWidth() (typetags.Type, int, error) {
 	if s.pos >= s.count {
 		return 0, 0, fmt.Errorf("PeekTypeWidth: out of bounds at pos %d", s.pos)
 	}
@@ -91,9 +91,9 @@ func (s *SeqGetAccess) Advance() error {
 	s.currentOffset = s.nextOffset
 	s.currentType = s.nextType
 	//get next type if is exist
-	if s.currentType != types.TypeEnd {
+	if s.currentType != typetags.TypeEnd {
 		h := binary.LittleEndian.Uint16(s.buf[(s.pos+1)*2:])
-		end, nt := types.DecodeHeader(h)
+		end, nt := typetags.DecodeHeader(h)
 		end += s.base
 		s.nextOffset = end
 		s.nextType = nt
@@ -103,7 +103,7 @@ func (s *SeqGetAccess) Advance() error {
 }
 
 func (s *SeqGetAccess) PeekNestedSeq() (*SeqGetAccess, error) {
-	if s.currentType != types.TypeMap && s.currentType != types.TypeTuple {
+	if s.currentType != typetags.TypeMap && s.currentType != typetags.TypeTuple {
 		return nil, fmt.Errorf("peekNestedSeq: current type is not Map or Tuple (got %v)", s.currentType)
 	}
 
@@ -120,7 +120,7 @@ func (s *SeqGetAccess) PeekNestedSeq() (*SeqGetAccess, error) {
 	return nested, nil
 }
 
-func (s *SeqGetAccess) Next() ([]byte, types.Type, error) {
+func (s *SeqGetAccess) Next() ([]byte, typetags.Type, error) {
 	typ, width, err := s.PeekTypeWidth()
 	if err != nil {
 		return nil, 0, fmt.Errorf("next: peek failed at pos %d: %w", s.pos, err)
@@ -138,7 +138,7 @@ func (s *SeqGetAccess) Next() ([]byte, types.Type, error) {
 	return payload, typ, nil
 }
 
-func (s *SeqGetAccess) NextOffsetWidth() (int, int, types.Type, error) {
+func (s *SeqGetAccess) NextOffsetWidth() (int, int, typetags.Type, error) {
 	typ, width, err := s.PeekTypeWidth()
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("next: peek failed at pos %d: %w", s.pos, err)

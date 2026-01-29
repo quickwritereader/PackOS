@@ -4,14 +4,14 @@ import (
 	"encoding/binary"
 	"math"
 
-	"github.com/quickwritereader/PackOS/types"
+	"github.com/quickwritereader/PackOS/typetags"
 )
 
 const HeaderTagSize = 2
 
 // WriteTypeHeader writes a header to the buffer at pos and returns the new position.
-func WriteTypeHeader(buffer []byte, pos int, encodedPos int, t types.Type) (newPos int) {
-	header := types.EncodeHeader(encodedPos, t)
+func WriteTypeHeader(buffer []byte, pos int, encodedPos int, t typetags.Type) (newPos int) {
+	header := typetags.EncodeHeader(encodedPos, t)
 	binary.LittleEndian.PutUint16(buffer[pos:], header)
 	return pos + 2
 }

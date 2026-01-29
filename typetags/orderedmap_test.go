@@ -1,4 +1,4 @@
-package types
+package typetags
 
 import (
 	"encoding/json"

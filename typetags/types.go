@@ -1,4 +1,4 @@
-package types
+package typetags
 
 // Type is a 3-bit tag encoded into a uint16 header
 type Type uint16
