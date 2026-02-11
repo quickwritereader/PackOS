@@ -25,10 +25,14 @@ Future versions may lift the size limit for general-purpose use.
   Stable binary layout across runs and variants  
 
 - [ ] **General-purpose container support**  
-  Arbitrarily large maps, slices, and tagged frames without size limits  
+  Arbitrarily large maps, slices, and tagged frames without size limits
 
 - [ ] **Large structure generation**  
   Big and nested complex structures above the 8 KB limit  
+
+
+- [ADR 001: Addressing the 13-bit Limit via Extended Containers](https://github.com/quickwritereader/PackOS/discussions/8)  
+- [ADR 002: Length-Agnostic Implicit Array Encoding for Integer and Float](https://github.com/quickwritereader/PackOS/discussions/9)
 
 
 ## Encoding Example
