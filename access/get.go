@@ -340,6 +340,22 @@ func (g *GetAccess) GetBytes(pos int) ([]byte, error) {
 	return g.buf[start:end], nil
 }
 
+// GetCopyBytes decodes and returns a fresh copy of the byte slice.
+// Use this to avoid retention of the entire GetAccess buffer in memory,
+// which prevents the garbage collector from reclaiming the large backing array.
+func (g *GetAccess) GetCopyBytes(pos int) ([]byte, error) {
+	data, err := g.GetBytes(pos)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create an independent copy to break the reference to g.buf
+	cp := make([]byte, len(data))
+	copy(cp, data)
+	
+	return cp, nil
+}
+
 // GetString decodes a string at position pos
 func (g *GetAccess) GetString(pos int) (string, error) {
 	tp, start, end := g.rangeAt(pos)
