@@ -352,7 +352,7 @@ func (g *GetAccess) GetCopyBytes(pos int) ([]byte, error) {
 	// Create an independent copy to break the reference to g.buf
 	cp := make([]byte, len(data))
 	copy(cp, data)
-	
+
 	return cp, nil
 }
 
@@ -498,4 +498,40 @@ func (g *GetAccess) GetNestedGetAccess(pos int) (*GetAccess, typetags.Type, erro
 		return nil, tp, nil // nil map
 	}
 	return NewGetAccess(g.buf[start:end]), tp, nil
+}
+
+// function to get type and value, which can be used for repacking or other purposes
+func (g *GetAccess) GetTypeAndValue(pos int) (typetags.Type, []byte) {
+	tp, start, end := g.rangeAt(pos)
+	if end < start {
+		return typetags.TypeInvalid, nil
+	}
+	return tp, g.buf[start:end]
+}
+
+type PackableTagValue struct {
+	head  typetags.Type
+	value []byte
+}
+
+func (px *PackableTagValue) HeaderType() typetags.Type {
+	return px.head
+}
+func (px *PackableTagValue) ValueSize() int {
+	return len(px.value)
+}
+func (px *PackableTagValue) Write(buf []byte, pos int) int {
+	return WriteBytes(buf, pos, px.value)
+}
+
+func (px *PackableTagValue) PackInto(p *PutAccess) {
+	p.AppendTagAndValue(px.head, px.value)
+}
+
+func (g *GetAccess) GetAsPackable(pos int) (Packable, error) {
+	tp, value := g.GetTypeAndValue(pos)
+	if value == nil && tp == typetags.TypeInvalid {
+		return nil, fmt.Errorf("invalid")
+	}
+	return &PackableTagValue{head: tp, value: value}, nil
 }
