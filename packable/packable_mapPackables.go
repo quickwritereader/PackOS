@@ -303,55 +303,55 @@ func (p *PackableMapOrdered) Write(buf []byte, pos int) int {
 
 func (pack PackMap) PackInto(p *access.PutAccess) {
 	size := pack.ValueSize()
-	buffer := bPool.Acquire(size)
+	buffer := BufferPoolInst.Acquire(size)
 	pos := 0
 	pos = pack.Write(buffer, pos)
 	p.AppendTagAndValue(typetags.TypeMap, buffer[:pos])
-	bPool.Release(buffer)
+	BufferPoolInst.Release(buffer)
 }
 
 func (pack PackMapSorted) PackInto(p *access.PutAccess) {
 	size := pack.ValueSize()
-	buffer := bPool.Acquire(size)
+	buffer := BufferPoolInst.Acquire(size)
 	pos := 0
 	pos = pack.Write(buffer, pos)
 	p.AppendTagAndValue(typetags.TypeMap, buffer[:pos])
-	bPool.Release(buffer)
+	BufferPoolInst.Release(buffer)
 }
 
 func (pack PackMapStr) PackInto(p *access.PutAccess) {
 	size := pack.ValueSize()
-	buffer := bPool.Acquire(size)
+	buffer := BufferPoolInst.Acquire(size)
 	pos := 0
 	pos = pack.Write(buffer, pos)
 	p.AppendTagAndValue(typetags.TypeMap, buffer[:pos])
-	bPool.Release(buffer)
+	BufferPoolInst.Release(buffer)
 }
 
 func (pack PackMapStrInt32) PackInto(p *access.PutAccess) {
 	size := pack.ValueSize()
-	buffer := bPool.Acquire(size)
+	buffer := BufferPoolInst.Acquire(size)
 	pos := 0
 	pos = pack.Write(buffer, pos)
 	p.AppendTagAndValue(typetags.TypeMap, buffer[:pos])
-	bPool.Release(buffer)
+	BufferPoolInst.Release(buffer)
 }
 
 func (pack PackMapStrInt64) PackInto(p *access.PutAccess) {
 	size := pack.ValueSize()
-	buffer := bPool.Acquire(size)
+	buffer := BufferPoolInst.Acquire(size)
 	pos := 0
 	pos = pack.Write(buffer, pos)
 	p.AppendTagAndValue(typetags.TypeMap, buffer[:pos])
-	bPool.Release(buffer)
+	BufferPoolInst.Release(buffer)
 }
 
 // PackInto packs the ordered map into the PutAccess buffer.
 func (pack *PackableMapOrdered) PackInto(p *access.PutAccess) {
 	size := pack.ValueSize()
-	buffer := bPool.Acquire(size)
+	buffer := BufferPoolInst.Acquire(size)
 	pos := 0
 	pos = pack.Write(buffer, pos)
 	p.AppendTagAndValue(typetags.TypeMap, buffer[:pos])
-	bPool.Release(buffer)
+	BufferPoolInst.Release(buffer)
 }

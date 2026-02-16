@@ -73,11 +73,11 @@ func (p Tuple) HeaderType() typetags.Type {
 func (pack Tuple) PackInto(p *access.PutAccess) {
 	//prepare buffer and write everything, then append it into p
 	size := pack.ValueSize()
-	buffer := bPool.Acquire(size)
+	buffer := BufferPoolInst.Acquire(size)
 	pos := 0
 	pos = pack.Write(buffer, pos)
 	p.AppendTagAndValue(typetags.TypeTuple, buffer[:pos])
-	bPool.Release(buffer)
+	BufferPoolInst.Release(buffer)
 }
 
 func PackTuple(args ...access.Packable) Tuple {
