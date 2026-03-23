@@ -63,3 +63,17 @@ func PackExtendedWithPackableMap(pivot int, m map[string]access.Packable) ([]byt
 
 	return put.PackExtended()
 }
+
+// PackInt64Array packs an int64 array with automatic segmentation
+func PackInt64Array(pivot int, values []int64) ([]byte, error) {
+	put := access.NewExtendedPutAccess(pivot)
+	put.AddIntegerArray(values)
+	return put.PackExtended()
+}
+
+// PackFloat64Array packs a float64 array with automatic segmentation
+func PackFloat64Array(pivot int, values []float64) ([]byte, error) {
+	put := access.NewExtendedPutAccess(pivot)
+	put.AddFloatArray(values)
+	return put.PackExtended()
+}

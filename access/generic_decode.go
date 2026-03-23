@@ -9,37 +9,44 @@ import (
 )
 
 // DecodePrimitive interprets a primitive payload directly using type tag and width.
-// It returns a Go value (int, float, string, []byte as string, bool, nil).
+// It returns a Go value (int, float, string, []byte, bool, nil, or array).
+// For integer and floating-point types, if payload size > 8 bytes, it decodes as an array.
 func DecodePrimitive(typ typetags.Type, buf []byte) (any, error) {
 	size := len(buf)
 
 	switch typ {
 	case typetags.TypeInteger:
-		switch size {
-		case 0:
+		switch {
+		case size == 0:
 			return nil, nil
-		case 1:
+		case size == 1:
 			return int8(buf[0]), nil
-		case 2:
+		case size == 2:
 			return int16(binary.LittleEndian.Uint16(buf)), nil
-		case 4:
+		case size == 4:
 			return int32(binary.LittleEndian.Uint32(buf)), nil
-		case 8:
+		case size == 8:
 			return int64(binary.LittleEndian.Uint64(buf)), nil
+		case size > typetags.MaxScalarSize:
+			// Array mode: payload > 8 bytes
+			return decodeIntegerArrayPayload(buf)
 		default:
 			return nil, fmt.Errorf("DecodePrimitive: unsupported integer size %d", size)
 		}
 
 	case typetags.TypeFloating:
-		switch size {
-		case 0:
+		switch {
+		case size == 0:
 			return nil, nil
-		case 4:
+		case size == 4:
 			bits := binary.LittleEndian.Uint32(buf)
 			return math.Float32frombits(bits), nil
-		case 8:
+		case size == 8:
 			bits := binary.LittleEndian.Uint64(buf)
 			return math.Float64frombits(bits), nil
+		case size > typetags.MaxScalarSize:
+			// Array mode: payload > 8 bytes
+			return decodeFloatArrayPayload(buf)
 		default:
 			return nil, fmt.Errorf("DecodePrimitive: unsupported float size %d", size)
 		}
@@ -59,6 +66,32 @@ func DecodePrimitive(typ typetags.Type, buf []byte) (any, error) {
 	default:
 		return nil, fmt.Errorf("DecodePrimitive: unsupported type %v", typ)
 	}
+}
+
+// decodeIntegerArrayPayload decodes an integer array from the payload
+func decodeIntegerArrayPayload(payload []byte) (any, error) {
+	elementSize, ok := typetags.ArrayElementSize(payload)
+	if !ok {
+		return nil, fmt.Errorf("invalid array element size: %d", payload[0])
+	}
+
+	count := typetags.ArrayElementCount(len(payload), elementSize)
+	data := payload[1:] // Skip the element size indicator
+
+	return decodeIntegerArray(data, elementSize, count)
+}
+
+// decodeFloatArrayPayload decodes a floating-point array from the payload
+func decodeFloatArrayPayload(payload []byte) (any, error) {
+	elementSize, ok := typetags.ArrayElementSize(payload)
+	if !ok {
+		return nil, fmt.Errorf("invalid array element size: %d", payload[0])
+	}
+
+	count := typetags.ArrayElementCount(len(payload), elementSize)
+	data := payload[1:] // Skip the element size indicator
+
+	return decodeFloatArray(data, elementSize, count)
 }
 
 // DecodeTupleGeneric: decode a []any from the current position in a SeqGetAccess.
@@ -327,4 +360,51 @@ func DecodeOrdered(buf []byte) (any, error) {
 		return vals[0], nil
 	}
 	return vals, nil
+}
+
+// decodeIntegerArray decodes an integer array
+func decodeIntegerArray(data []byte, elementSize, count int) (any, error) {
+	result := make([]int64, count)
+
+	for i := range count {
+		offset := i * elementSize
+		switch elementSize {
+		case 1:
+			result[i] = int64(data[offset])
+		case 2:
+			result[i] = int64(binary.LittleEndian.Uint16(data[offset:]))
+		case 4:
+			result[i] = int64(binary.LittleEndian.Uint32(data[offset:]))
+		case 8:
+			result[i] = int64(binary.LittleEndian.Uint64(data[offset:]))
+		default:
+			return nil, fmt.Errorf("unsupported element size: %d", elementSize)
+		}
+	}
+
+	return result, nil
+}
+
+// decodeFloatArray decodes a floating-point array
+func decodeFloatArray(data []byte, elementSize, count int) (any, error) {
+	if elementSize != 4 && elementSize != 8 {
+		return nil, fmt.Errorf("unsupported float element size: %d", elementSize)
+	}
+
+	if elementSize == 4 {
+		result := make([]float32, count)
+		for i := 0; i < count; i++ {
+			bits := binary.LittleEndian.Uint32(data[i*4:])
+			result[i] = math.Float32frombits(bits)
+		}
+		return result, nil
+	}
+
+	// elementSize == 8
+	result := make([]float64, count)
+	for i := range count {
+		bits := binary.LittleEndian.Uint64(data[i*8:])
+		result[i] = math.Float64frombits(bits)
+	}
+	return result, nil
 }
