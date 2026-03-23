@@ -734,3 +734,90 @@ func (p *PutAccess) AddNumericString(val string) error {
 	}
 	return fmt.Errorf("AddNumericString: unsupported numeric string %q", val)
 }
+
+// AddIntegerArray adds an integer array
+func (p *PutAccess) AddIntegerArray(values []int64) {
+	if len(values) == 0 {
+		p.AddNull(nil)
+		return
+	}
+
+	// Determine the minimal element size that can store all values
+	elementSize := determineIntegerSize(values)
+
+	// Create buffer: [elementSize] + [values...]
+	buf := make([]byte, 1+len(values)*elementSize)
+	buf[0] = byte(elementSize)
+
+	// Encode values
+	encodeIntegers(buf[1:], values, elementSize)
+
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets,
+		typetags.EncodeHeader(p.position, typetags.TypeInteger))
+	p.buf = append(p.buf, buf...)
+	p.position = len(p.buf)
+}
+
+// AddFloatArray adds a floating-point array
+func (p *PutAccess) AddFloatArray(values []float64) {
+	if len(values) == 0 {
+		p.AddNull(nil)
+		return
+	}
+
+	// Always use float64 (8 bytes)
+	elementSize := 8
+	buf := make([]byte, 1+len(values)*elementSize)
+	buf[0] = byte(elementSize)
+
+	for i, v := range values {
+		bits := math.Float64bits(v)
+		binary.LittleEndian.PutUint64(buf[1+i*elementSize:], bits)
+	}
+
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets,
+		typetags.EncodeHeader(p.position, typetags.TypeFloating))
+	p.buf = append(p.buf, buf...)
+	p.position = len(p.buf)
+}
+
+// determineIntegerSize determines the minimal element size that can store all integers
+func determineIntegerSize(values []int64) int {
+	maxVal := int64(0)
+	minVal := int64(0)
+	for _, v := range values {
+		if v > maxVal {
+			maxVal = v
+		}
+		if v < minVal {
+			minVal = v
+		}
+	}
+
+	switch {
+	case minVal >= math.MinInt8 && maxVal <= math.MaxInt8:
+		return 1
+	case minVal >= math.MinInt16 && maxVal <= math.MaxInt16:
+		return 2
+	case minVal >= math.MinInt32 && maxVal <= math.MaxInt32:
+		return 4
+	default:
+		return 8
+	}
+}
+
+// encodeIntegers encodes integers into the buffer with the given element size
+func encodeIntegers(buf []byte, values []int64, elementSize int) {
+	for i, v := range values {
+		switch elementSize {
+		case 1:
+			buf[i] = byte(v)
+		case 2:
+			binary.LittleEndian.PutUint16(buf[i*2:], uint16(v))
+		case 4:
+			binary.LittleEndian.PutUint32(buf[i*4:], uint32(v))
+		case 8:
+			binary.LittleEndian.PutUint64(buf[i*8:], uint64(v))
+		}
+	}
+}

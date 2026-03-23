@@ -3,6 +3,9 @@ package typetags
 // Type is a 3-bit tag encoded into a uint16 header
 type Type uint16
 
+// MaxScalarSize is the maximum size of a scalar value (8 bytes)
+const MaxScalarSize = 8
+
 const (
 	TypeInvalid              Type = 0
 	TypeEnd                  Type = 0
@@ -19,7 +22,44 @@ const (
 	TypeMap                  Type = 7
 )
 
-// String returns the human-readable name of the type
+// Extended container constants
+const (
+	ExtendedContainerValueSize = 4 // 4 bytes continuation
+	EndOfChain                 = 0xFFFFFFFF
+)
+
+// ExtendedContainerValue represents the 4-byte management block for extended containers
+type ExtendedContainerValue struct {
+	Continuation uint32 // Absolute 32-bit offset to next segment (or EndOfChain)
+	// SelfOffset   uint32 // Absolute 32-bit address for validation
+}
+
+// IsArray determines whether the payload is an array
+func IsArray(payloadSize int) bool {
+	return payloadSize > MaxScalarSize
+}
+
+// ArrayElementSize returns the element size from the first byte of the payload
+func ArrayElementSize(payload []byte) (int, bool) {
+	if len(payload) == 0 {
+		return 0, false
+	}
+	switch payload[0] {
+	case 1, 2, 4, 8:
+		return int(payload[0]), true
+	default:
+		return 0, false
+	}
+}
+
+// ArrayElementCount calculates the number of elements in the array
+func ArrayElementCount(payloadSize, elementSize int) int {
+	if elementSize <= 0 {
+		return 0
+	}
+	return (payloadSize - 1) / elementSize
+}
+
 func (t Type) String() string {
 	switch t {
 	case TypeInteger:
