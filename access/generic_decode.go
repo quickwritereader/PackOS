@@ -10,7 +10,7 @@ import (
 
 // DecodePrimitive interprets a primitive payload directly using type tag and width.
 // It returns a Go value (int, float, string, []byte as string, bool, nil).
-func DecodePrimitive(typ typetags.Type, buf []byte) (interface{}, error) {
+func DecodePrimitive(typ typetags.Type, buf []byte) (any, error) {
 	size := len(buf)
 
 	switch typ {

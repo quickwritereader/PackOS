@@ -59,7 +59,7 @@ func TestKeysValuesItems(t *testing.T) {
 	assert.Equal(t, []string{"a", "b", "c"}, keys)
 
 	values := om.Values()
-	assert.Equal(t, []interface{}{1, 2, 3}, values)
+	assert.Equal(t, []any{1, 2, 3}, values)
 
 	items := om.Items()
 	expected := []PairAny{

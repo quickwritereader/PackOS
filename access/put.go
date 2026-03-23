@@ -14,7 +14,7 @@ import (
 )
 
 var putAccessPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		return &PutAccess{
 			buf:     make([]byte, 0, 1024),
 			offsets: make([]byte, 0, 1024),
@@ -340,7 +340,7 @@ func (p *PutAccess) AddStringArray(arr []string) {
 	p.appendAndReleaseNested(nested)
 }
 
-func (p *PutAccess) AddAnyTuple(m []interface{}, useNumeric bool) error {
+func (p *PutAccess) AddAnyTuple(m []any, useNumeric bool) error {
 	// encode tuple header
 	p.offsets = binary.LittleEndian.AppendUint16(
 		p.offsets,
@@ -361,7 +361,7 @@ func (p *PutAccess) AddAnyTuple(m []interface{}, useNumeric bool) error {
 	return nil
 }
 
-func (p *PutAccess) AddAnyTupleSortedMap(m []interface{}, useNumeric bool) error {
+func (p *PutAccess) AddAnyTupleSortedMap(m []any, useNumeric bool) error {
 	// encode tuple header
 	p.offsets = binary.LittleEndian.AppendUint16(
 		p.offsets,
@@ -382,7 +382,7 @@ func (p *PutAccess) AddAnyTupleSortedMap(m []interface{}, useNumeric bool) error
 	return nil
 }
 
-func (p *PutAccess) AddNull(m []interface{}) {
+func (p *PutAccess) AddNull(m []any) {
 	// encode tuple header
 	p.offsets = binary.LittleEndian.AppendUint16(
 		p.offsets,
@@ -448,14 +448,10 @@ func packAnyValue(p *PutAccess, v any, useNumeric bool) error {
 		p.AddBytes(val)
 	case map[string]string:
 		p.AddMapStr(val)
-	case uint8:
-		p.AddUint8(val)
-	case uint16:
-		p.AddUint16(val)
-	case uint32:
-		p.AddUint32(val)
-	case uint64:
-		p.AddUint64(val)
+	case int:
+		p.AddInt64(int64(val))
+	case uint:
+		p.AddUint64(uint64(val))
 	case int8:
 		p.AddInt8(val)
 	case int16:
@@ -464,6 +460,14 @@ func packAnyValue(p *PutAccess, v any, useNumeric bool) error {
 		p.AddInt32(val)
 	case int64:
 		p.AddInt64(val)
+	case uint8:
+		p.AddUint8(val)
+	case uint16:
+		p.AddUint16(val)
+	case uint32:
+		p.AddUint32(val)
+	case uint64:
+		p.AddUint64(val)
 	case float32:
 		p.AddFloat32(val)
 	case float64:
@@ -482,7 +486,7 @@ func packAnyValue(p *PutAccess, v any, useNumeric bool) error {
 		p.AddStringArray(val)
 	case *typetags.OrderedMap[any]:
 		err = p.AddMapAnyOrdered(val, useNumeric)
-	case []interface{}:
+	case []any:
 		err = p.AddAnyTuple(val, useNumeric)
 	case Packable:
 		val.PackInto(p)
@@ -506,6 +510,10 @@ func packAnyValueSortedMap(p *PutAccess, v any, useNumeric bool) error {
 		p.AddBytes(val)
 	case map[string]string:
 		p.AddMapSortedKeyStr(val)
+	case int:
+		p.AddInt64(int64(val))
+	case uint:
+		p.AddUint64(uint64(val))
 	case int8:
 		p.AddInt8(val)
 	case int16:
@@ -514,6 +522,14 @@ func packAnyValueSortedMap(p *PutAccess, v any, useNumeric bool) error {
 		p.AddInt32(val)
 	case int64:
 		p.AddInt64(val)
+	case uint8:
+		p.AddUint8(val)
+	case uint16:
+		p.AddUint16(val)
+	case uint32:
+		p.AddUint32(val)
+	case uint64:
+		p.AddUint64(val)
 	case float32:
 		p.AddFloat32(val)
 	case float64:
