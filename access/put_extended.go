@@ -15,6 +15,12 @@ type ExtendedPutAccess struct {
 	pivotSize    int      // Size threshold for creating new segment
 	extendedMode bool     // Whether we're in extended container mode
 	segmentCount int      // Number of segments created
+
+	triplets    []Triplet            // Track [parent segment, nextOffset address, actual segment]
+	nestedStack []*ExtendedPutAccess // Stack for nested containers
+
+	// For nested containers: track parent offset address
+	parentOffsetAddr int // Address in parent's offsets where our header is
 }
 
 // NewExtendedPutAccess creates a new extended put access with custom pivot size
@@ -29,12 +35,15 @@ func NewExtendedPutAccess(pivotSize int) *ExtendedPutAccess {
 	}
 
 	return &ExtendedPutAccess{
-		PutAccess:    NewPutAccess(),
-		segments:     make([][]byte, 0, 4),
-		currentSize:  0,
-		pivotSize:    pivotSize,
-		extendedMode: false,
-		segmentCount: 0,
+		PutAccess:        NewPutAccess(),
+		segments:         make([][]byte, 0, 4),
+		currentSize:      0,
+		pivotSize:        pivotSize,
+		extendedMode:     false,
+		segmentCount:     0,
+		triplets:         make([]Triplet, 0, 8),
+		nestedStack:      make([]*ExtendedPutAccess, 0, 4),
+		parentOffsetAddr: -1, // -1 means not a nested container
 	}
 }
 
@@ -68,6 +77,19 @@ func (p *ExtendedPutAccess) finalizeSegment() error {
 	segment := p.Pack()
 	p.segments = append(p.segments, segment)
 
+	// Create triplet for this segment if we're in extended mode
+	if p.extendedMode && len(p.segments) > 1 {
+		// For extended containers, track the segment
+		triplet := Triplet{
+			ParentSegment:  nil, // Root segments don't have parent
+			NextOffsetAddr: -1,  // Not applicable for root segments
+			ActualSegment:  segment,
+			IsExtended:     true,
+			SelfOffset:     uint32(len(segment)), // Will be updated in buildExtendedContainer
+		}
+		p.triplets = append(p.triplets, triplet)
+	}
+
 	// Reset for next segment
 	p.buf = make([]byte, 0, p.pivotSize)
 	p.offsets = make([]byte, 0, 64)
@@ -89,15 +111,9 @@ func (p *ExtendedPutAccess) buildExtendedContainer() ([]byte, error) {
 		return nil, fmt.Errorf("no segments to build")
 	}
 
-	// Create a new PutAccess for the container
-	container := NewPutAccess()
-
-	// Write extended container header
-	container.offsets = binary.LittleEndian.AppendUint16(container.offsets,
-		typetags.EncodeHeader(0, typetags.TypeExtendedTagContainer))
-
-	// Build the container payload
+	// Build the container payload with extended headers and segments
 	var currentOffset uint32 = 0
+	payload := make([]byte, 0)
 
 	for i, segment := range p.segments {
 		selfOffset := currentOffset
@@ -105,25 +121,53 @@ func (p *ExtendedPutAccess) buildExtendedContainer() ([]byte, error) {
 
 		if i < len(p.segments)-1 {
 			// Calculate continuation offset
-			continuation = currentOffset + uint32(len(segment))
+			// Next extended header will be at currentOffset + ExtendedHeaderSize + segment length
+			continuation = currentOffset + typetags.ExtendedHeaderSize + uint32(len(segment))
 		} else {
 			continuation = typetags.EndOfChain
 		}
 
 		// Add extended header
-		container.buf = append(container.buf,
+		payload = append(payload,
 			typetags.EncodeExtendedHeader(selfOffset, continuation)...)
 
 		// Add segment payload
-		container.buf = append(container.buf, segment...)
-		currentOffset += uint32(len(segment))
+		payload = append(payload, segment...)
+
+		// Update triplet SelfOffset if this is an extended container segment
+		if p.extendedMode && i < len(p.triplets) {
+			p.triplets[i].SelfOffset = selfOffset
+			p.triplets[i].Continuation = continuation
+		}
+
+		currentOffset += typetags.ExtendedHeaderSize + uint32(len(segment))
 	}
 
-	// Complete container
-	container.offsets = binary.LittleEndian.AppendUint16(container.offsets,
-		typetags.EncodeEnd(int(len(container.buf))))
+	// Calculate payload size
+	payloadSize := len(payload)
 
-	return container.Pack(), nil
+	// Create headers manually
+	// First header: extended container type with offset to payload
+	headers := make([]byte, 0, 4) // Reserve space for header + TypeEnd
+	headers = binary.LittleEndian.AppendUint16(headers,
+		typetags.EncodeHeader(4, typetags.TypeExtendedTagContainer)) // Offset is 4 (size of headers section)
+
+	// Add TypeEnd marker
+	// For extended containers, we use the maximum 13-bit value (8191)
+	// since the actual payload might be larger. The loader will handle this.
+	max13Bit := 8191
+	if payloadSize < max13Bit {
+		max13Bit = payloadSize
+	}
+	headers = binary.LittleEndian.AppendUint16(headers,
+		typetags.EncodeEnd(max13Bit))
+
+	// Combine headers and payload
+	result := make([]byte, 0, len(headers)+payloadSize)
+	result = append(result, headers...)
+	result = append(result, payload...)
+
+	return result, nil
 }
 
 // PackExtended finalizes and returns the packed buffer with extended container support
@@ -151,6 +195,24 @@ func (p *ExtendedPutAccess) PackExtended() ([]byte, error) {
 
 // AddWithExtendedCheck adds data with automatic segment creation
 func (p *ExtendedPutAccess) AddWithExtendedCheck(adder func(*PutAccess), dataSize int) error {
+	// If data is larger than pivot size, we need to handle it specially
+	if dataSize > p.pivotSize {
+		// For very large data, we need to create an extended container
+		// Create a nested extended container for this large data
+		nested := p.BeginNested(typetags.TypeTuple)
+		adder(nested.PutAccess)
+
+		// Force the nested container to be extended
+		nested.extendedMode = true
+
+		// Finalize and end the nested container
+		if err := p.EndNested(nested); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// Regular size data
 	if p.checkSegmentThreshold(dataSize) {
 		if err := p.finalizeSegment(); err != nil {
 			return err
@@ -284,4 +346,89 @@ func (p *ExtendedPutAccess) GetSegmentCount() int {
 // IsExtendedMode returns whether we're in extended mode
 func (p *ExtendedPutAccess) IsExtendedMode() bool {
 	return p.extendedMode
+}
+
+// BeginNested starts a nested container that may become extended
+func (p *ExtendedPutAccess) BeginNested(tag typetags.Type) *ExtendedPutAccess {
+	// Record where our header will be in parent's offsets
+	nextOffsetAddr := len(p.offsets)
+
+	// Write placeholder header (will be patched later if extended)
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets,
+		typetags.EncodeHeader(p.position, tag))
+
+	// Create nested access
+	nested := &ExtendedPutAccess{
+		PutAccess:        NewPutAccess(),
+		segments:         make([][]byte, 0, 4),
+		currentSize:      0,
+		pivotSize:        p.pivotSize,
+		extendedMode:     false,
+		segmentCount:     0,
+		triplets:         p.triplets,               // Share triplets with parent
+		nestedStack:      append(p.nestedStack, p), // Push parent to stack
+		parentOffsetAddr: nextOffsetAddr,           // Store where our header is in parent
+	}
+
+	return nested
+}
+
+// EndNested ends a nested container and handles potential extension
+func (p *ExtendedPutAccess) EndNested(nested *ExtendedPutAccess) error {
+	// Pack the nested container
+	nestedData, err := nested.PackExtended()
+	if err != nil {
+		return err
+	}
+
+	// Check if this nested container needs to be extended
+	// (either because it's large or contains extended segments)
+	needsExtension := len(nestedData) > p.pivotSize || nested.extendedMode
+
+	// Create triplet for tracking
+	triplet := Triplet{
+		ParentSegment:  p.buf,
+		NextOffsetAddr: nested.parentOffsetAddr, // Address of our header in parent
+		ActualSegment:  nestedData,
+		IsExtended:     needsExtension,
+	}
+
+	// Add to shared triplets
+	p.triplets = append(p.triplets, triplet)
+
+	if needsExtension {
+		// Update parent header to extended container type
+		headerIdx := nested.parentOffsetAddr
+		if headerIdx >= 0 && headerIdx+2 <= len(p.offsets) {
+			currentHeader := binary.LittleEndian.Uint16(p.offsets[headerIdx:])
+			offset, _ := typetags.DecodeHeader(currentHeader)
+			newHeader := typetags.EncodeHeader(offset, typetags.TypeExtendedTagContainer)
+			binary.LittleEndian.PutUint16(p.offsets[headerIdx:], newHeader)
+		}
+
+		// Store extended container data
+		p.buf = append(p.buf, nestedData...)
+		p.position = len(p.buf)
+	} else {
+		// Store regular nested container
+		p.buf = append(p.buf, nestedData...)
+		p.position = len(p.buf)
+	}
+
+	return nil
+}
+
+// BeginTuple starts a tuple that may become extended
+func (p *ExtendedPutAccess) BeginTuple() *ExtendedPutAccess {
+	return p.BeginNested(typetags.TypeTuple)
+}
+
+// BeginMap starts a map that may become extended
+func (p *ExtendedPutAccess) BeginMap() *ExtendedPutAccess {
+	return p.BeginNested(typetags.TypeMap)
+}
+
+// GetTriplets returns all tracked triplets
+func (p *ExtendedPutAccess) GetTriplets() []Triplet {
+	return p.triplets
 }

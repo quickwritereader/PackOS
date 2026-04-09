@@ -10,14 +10,14 @@ import (
 )
 
 func TestExtendedPutAccess_SingleSegment(t *testing.T) {
-	put := NewExtendedPutAccess(4096)
+	ec := NewExtendedContainer(4096)
 
 	// Add small amount of data
-	for i := 0; i < 10; i++ {
-		require.NoError(t, put.AddInt16Extended(int16(i)))
+	for i := range 10 {
+		require.NoError(t, ec.AddInt16(int16(i)))
 	}
 
-	result, err := put.PackExtended()
+	result, err := ec.Pack()
 	require.NoError(t, err)
 
 	// Should not create extended container
@@ -25,7 +25,7 @@ func TestExtendedPutAccess_SingleSegment(t *testing.T) {
 }
 
 func TestExtendedPutAccess_MultipleSegments(t *testing.T) {
-	put := NewExtendedPutAccess(1024) // Small pivot to force segmentation
+	ec := NewExtendedContainer(1024) // Small pivot to force segmentation
 
 	// Add large string to exceed threshold
 	largeString := make([]byte, 800)
@@ -33,11 +33,11 @@ func TestExtendedPutAccess_MultipleSegments(t *testing.T) {
 		largeString[i] = 'A'
 	}
 
-	for i := 0; i < 10; i++ {
-		require.NoError(t, put.AddStringExtended(string(largeString)))
+	for range 10 {
+		require.NoError(t, ec.AddString(string(largeString)))
 	}
 
-	result, err := put.PackExtended()
+	result, err := ec.Pack()
 	require.NoError(t, err)
 
 	// Should create extended container
@@ -52,36 +52,36 @@ func TestExtendedPutAccess_MultipleSegments(t *testing.T) {
 }
 
 func TestExtendedPutAccess_EmptySegments(t *testing.T) {
-	put := NewExtendedPutAccess(4096)
+	ec := NewExtendedContainer(4096)
 
-	result, err := put.PackExtended()
+	result, err := ec.Pack()
 	require.NoError(t, err)
 	assert.Empty(t, result)
 }
 
 func TestExtendedPutAccess_MixedTypes(t *testing.T) {
-	put := NewExtendedPutAccess(2048)
+	ec := NewExtendedContainer(2048)
 
 	// Add mixed data types
-	for i := 0; i < 100; i++ {
-		require.NoError(t, put.AddInt16Extended(int16(i)))
-		require.NoError(t, put.AddStringExtended("test"))
+	for i := range 100 {
+		require.NoError(t, ec.AddInt16(int16(i)))
+		require.NoError(t, ec.AddString("test"))
 	}
 
-	result, err := put.PackExtended()
+	result, err := ec.Pack()
 	require.NoError(t, err)
 	assert.NotEmpty(t, result)
 }
 
 func TestExtendedPutAccess_ExactThreshold(t *testing.T) {
-	put := NewExtendedPutAccess(100)
+	ec := NewExtendedContainer(100)
 
 	// Add data exactly at threshold
-	for i := 0; i < 10; i++ {
-		require.NoError(t, put.AddStringExtended("1234567890")) // 10 bytes each
+	for range 10 {
+		require.NoError(t, ec.AddString("1234567890")) // 10 bytes each
 	}
 
-	result, err := put.PackExtended()
+	result, err := ec.Pack()
 	require.NoError(t, err)
 	assert.NotEmpty(t, result)
 }

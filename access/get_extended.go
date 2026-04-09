@@ -40,23 +40,46 @@ func NewExtendedGetAccess(buf []byte) *ExtendedGetAccess {
 
 // loadExtendedContainer loads and validates extended container chain
 func (e *ExtendedGetAccess) loadExtendedContainer(buf []byte) {
-	if len(buf) < typetags.ExtendedHeaderSize+2 {
+	if len(buf) < 4 {
 		return
 	}
 
-	// Get container payload (skip header)
-	container := NewGetAccess(buf)
-	if container == nil {
+	// Parse extended container manually (bypass NewGetAccess for large payloads)
+	// Read first header to get type
+	h1 := binary.LittleEndian.Uint16(buf[0:2])
+	offset1, typ := typetags.DecodeHeader(h1)
+
+	if typ != typetags.TypeExtendedTagContainer {
 		return
 	}
 
-	// Extract payload
-	_, start, end := container.rangeAt(0)
-	if end < start {
+	// Read TypeEnd marker
+	h2 := binary.LittleEndian.Uint16(buf[2:4])
+	endOffset := typetags.DecodeOffset(h2)
+
+	// For extended containers, the payload might be larger than 8191 bytes
+	// but EncodeEnd() can only encode 13 bits. So we need to handle this specially.
+	// If endOffset is 8191 (the maximum 13-bit value), we assume the payload
+	// extends to the end of the buffer (extended container case).
+	payloadStart := offset1
+	var payloadEnd int
+
+	if endOffset == 8191 {
+		// Maximum 13-bit value - extended container with large payload
+		payloadEnd = len(buf)
+	} else if endOffset > 0 && offset1+endOffset <= len(buf) {
+		// Use the encoded end offset if it's valid
+		payloadEnd = offset1 + endOffset
+	} else {
+		// Invalid end offset
 		return
 	}
 
-	payload := container.buf[start:end]
+	if payloadEnd <= payloadStart || payloadEnd > len(buf) {
+		return
+	}
+
+	payload := buf[payloadStart:payloadEnd]
 	offset := 0
 	segments := make([][]byte, 0)
 
@@ -67,23 +90,31 @@ func (e *ExtendedGetAccess) loadExtendedContainer(buf []byte) {
 			break
 		}
 
-		offset += typetags.ExtendedHeaderSize
+		// Validate SelfOffset matches current position
+		if uint32(offset) != extHeader.SelfOffset {
+			// SelfOffset should match where we found this header
+			break
+		}
 
-		// Calculate segment end
+		// Calculate segment start and end
+		segmentStart := offset + typetags.ExtendedHeaderSize
 		var segmentEnd int
+
 		if extHeader.Continuation == typetags.EndOfChain {
 			segmentEnd = len(payload)
 		} else {
-			segmentEnd = offset + int(extHeader.Continuation-extHeader.SelfOffset)
+			segmentEnd = int(extHeader.Continuation)
 		}
 
-		if segmentEnd > len(payload) {
+		if segmentEnd > len(payload) || segmentStart >= segmentEnd {
 			break
 		}
 
 		// Extract segment
-		segment := payload[offset:segmentEnd]
+		segment := payload[segmentStart:segmentEnd]
 		segments = append(segments, segment)
+
+		// Move to next segment
 		offset = segmentEnd
 	}
 
@@ -151,24 +182,65 @@ func (e *ExtendedGetAccess) GetBytesExtended(pos int) ([]byte, error) {
 		return nil, fmt.Errorf("no active segment")
 	}
 
-	result, err := e.GetAccess.GetBytes(pos)
-	if err == nil {
-		return result, nil
-	}
-
-	// Try to find in next segments
+	// Save original state
 	originalSeg := e.currentSeg
-	defer func() {
-		e.currentSeg = originalSeg
-		e.GetAccess = NewGetAccess(e.segments[originalSeg])
-	}()
+	originalGetAccess := e.GetAccess
 
-	for e.NextSegment() {
-		result, err = e.GetAccess.GetBytes(pos)
-		if err == nil {
-			return result, nil
+	// Track current position as we iterate through segments
+	currentPos := 0
+
+	// Start from first segment
+	e.currentSeg = 0
+	e.GetAccess = NewGetAccess(e.segments[0])
+
+	// Iterate through all segments
+	for segIndex := 0; segIndex < len(e.segments); segIndex++ {
+		if segIndex > 0 {
+			// Move to next segment
+			e.currentSeg = segIndex
+			e.GetAccess = NewGetAccess(e.segments[segIndex])
+		}
+
+		if e.GetAccess == nil {
+			continue
+		}
+
+		// Try to get fields in current segment
+		// Use argCount to know how many fields are in this segment
+		if e.GetAccess.argCount > 0 {
+			for segmentFieldIndex := 0; segmentFieldIndex < e.GetAccess.argCount; segmentFieldIndex++ {
+				// Get the raw bytes for this field using rangeAt
+				tp, start, end := e.GetAccess.rangeAt(segmentFieldIndex)
+				if end <= start {
+					// Empty field, skip it
+					continue
+				}
+
+				// Skip extended containers (GetBytes can't decode them)
+				if tp == typetags.TypeExtendedTagContainer {
+					continue
+				}
+
+				// Extract the raw bytes
+				result := e.GetAccess.buf[start:end]
+
+				// Check if this is the field we're looking for
+				if currentPos == pos {
+					// Found it! Restore original state before returning
+					e.currentSeg = originalSeg
+					e.GetAccess = originalGetAccess
+					return result, nil
+				}
+
+				// Move to next field
+				currentPos++
+			}
 		}
 	}
+
+	// Restore original state
+	e.currentSeg = originalSeg
+	e.GetAccess = originalGetAccess
 
 	return nil, fmt.Errorf("field %d not found in any segment", pos)
 }
