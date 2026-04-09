@@ -2084,7 +2084,7 @@ func (s SchemaMultiCheckNamesSchema) Encode(put *access.PutAccess, val any) erro
 		for _, name := range v {
 			set[name] = struct{}{}
 		}
-	case []interface{}:
+	case []any:
 		for _, elem := range v {
 			str, ok := elem.(string)
 			if !ok {
