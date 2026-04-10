@@ -184,3 +184,70 @@ func PackFlags(flags ...bool) PackByteArrayRef {
 
 	return PackByteArrayRef{ref: &buf}
 }
+
+// PackIntegerArrayRef implements the Packable interface for *[]int64.
+type PackIntegerArrayRef struct {
+	ref         *[]int64
+	elementSize int
+}
+
+func (p PackIntegerArrayRef) HeaderType() typetags.Type { return typetags.TypeFloating }
+func (p PackIntegerArrayRef) ValueSize() int {
+
+	return len(*p.ref)*p.elementSize + 1
+}
+
+func (p PackIntegerArrayRef) Write(buf []byte, pos int) int {
+	// Write prefix byte for element size
+	buf[pos] = byte(p.elementSize)
+	pos++
+
+	// Encode values directly after the prefix
+	access.EncodeIntegers(buf[pos:], *p.ref, p.elementSize)
+
+	// Return new position after writing all values
+	return pos + len(*p.ref)*p.elementSize
+}
+
+func (v PackIntegerArrayRef) PackInto(p *access.PutAccess) {
+	p.AddIntegerArray(*v.ref)
+}
+
+func PackIntegerArray(values []int64) PackIntegerArrayRef {
+	elementSize := access.DetermineIntegerSize(values)
+	return PackIntegerArrayRef{ref: &values, elementSize: elementSize}
+}
+
+// PackFloatArrayRef implements the Packable interface for *[]float64.
+type PackFloatArrayRef struct {
+	ref *[]float64
+}
+
+func (p PackFloatArrayRef) HeaderType() typetags.Type {
+	return typetags.TypeFloating
+}
+
+func (p PackFloatArrayRef) ValueSize() int {
+	// +1 for the elementSize prefix byte (always 8)
+	return len(*p.ref)*8 + 1
+}
+
+func (p PackFloatArrayRef) Write(buf []byte, pos int) int {
+	// First byte indicates the element size (always 8)
+	buf[pos] = 8
+	pos++
+
+	// Write the float array
+	access.EncodeFloatingArray(buf[pos:], *p.ref)
+
+	return pos + len(*p.ref)*8
+}
+
+func (v PackFloatArrayRef) PackInto(p *access.PutAccess) {
+	p.AddFloatArray(*v.ref)
+}
+
+func PackFloatArray(values []float64) PackFloatArrayRef {
+	// No need to determine element size, always 8
+	return PackFloatArrayRef{ref: &values}
+}

@@ -743,14 +743,14 @@ func (p *PutAccess) AddIntegerArray(values []int64) {
 	}
 
 	// Determine the minimal element size that can store all values
-	elementSize := determineIntegerSize(values)
+	elementSize := DetermineIntegerSize(values)
 
 	// Create buffer: [elementSize] + [values...]
 	buf := make([]byte, 1+len(values)*elementSize)
 	buf[0] = byte(elementSize)
 
 	// Encode values
-	encodeIntegers(buf[1:], values, elementSize)
+	EncodeIntegers(buf[1:], values, elementSize)
 
 	p.offsets = binary.LittleEndian.AppendUint16(p.offsets,
 		typetags.EncodeHeader(p.position, typetags.TypeInteger))
@@ -770,10 +770,7 @@ func (p *PutAccess) AddFloatArray(values []float64) {
 	buf := make([]byte, 1+len(values)*elementSize)
 	buf[0] = byte(elementSize)
 
-	for i, v := range values {
-		bits := math.Float64bits(v)
-		binary.LittleEndian.PutUint64(buf[1+i*elementSize:], bits)
-	}
+	EncodeFloatingArray(buf, values)
 
 	p.offsets = binary.LittleEndian.AppendUint16(p.offsets,
 		typetags.EncodeHeader(p.position, typetags.TypeFloating))
@@ -781,8 +778,8 @@ func (p *PutAccess) AddFloatArray(values []float64) {
 	p.position = len(p.buf)
 }
 
-// determineIntegerSize determines the minimal element size that can store all integers
-func determineIntegerSize(values []int64) int {
+// DetermineIntegerSize determines the minimal element size that can store all integers
+func DetermineIntegerSize(values []int64) int {
 	maxVal := int64(0)
 	minVal := int64(0)
 	for _, v := range values {
@@ -806,18 +803,34 @@ func determineIntegerSize(values []int64) int {
 	}
 }
 
-// encodeIntegers encodes integers into the buffer with the given element size
-func encodeIntegers(buf []byte, values []int64, elementSize int) {
-	for i, v := range values {
-		switch elementSize {
-		case 1:
+// EncodeIntegers encodes an int64 slice into buf using the given element size.
+func EncodeIntegers(buf []byte, values []int64, elementSize int) {
+	switch elementSize {
+	case 1:
+		for i, v := range values {
 			buf[i] = byte(v)
-		case 2:
+		}
+	case 2:
+		for i, v := range values {
 			binary.LittleEndian.PutUint16(buf[i*2:], uint16(v))
-		case 4:
+		}
+	case 4:
+		for i, v := range values {
 			binary.LittleEndian.PutUint32(buf[i*4:], uint32(v))
-		case 8:
+		}
+	case 8:
+		for i, v := range values {
 			binary.LittleEndian.PutUint64(buf[i*8:], uint64(v))
 		}
+	default:
+		panic("unsupported element size")
+	}
+}
+
+// EncodeFloatingArray encodes a float64 slice into buf with element size fixed at 8.
+func EncodeFloatingArray(buf []byte, values []float64) {
+	for i, v := range values {
+		bits := math.Float64bits(v)
+		binary.LittleEndian.PutUint64(buf[i*8:], bits)
 	}
 }
