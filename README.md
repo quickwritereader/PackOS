@@ -24,15 +24,35 @@ Future versions may lift the size limit for general-purpose use.
 - [x] **Reproducible output**  
   Stable binary layout across runs and variants  
 
-- [ ] **General-purpose container support**  
-  Arbitrarily large maps, slices, and tagged frames without size limits
+- [x] **Big integer and floating array**
+  Ecoding/Decoding of integer and floating type arrays directly
 
-- [ ] **Large structure generation**  
+- [ ] **General-purpose container support**  
+  Arbitrarily large maps, slices, and tagged frames without size limits 
   Big and nested complex structures above the 8 KB limit  
 
 
 - [ADR 001: Addressing the 13-bit Limit via Extended Containers](https://github.com/quickwritereader/PackOS/discussions/8)  
 - [ADR 002: Length-Agnostic Implicit Array Encoding for Integer and Float](https://github.com/quickwritereader/PackOS/discussions/9)
+  (closed by [Mikhail G.](https://github.com/heartical))
+
+# Contributors
+
+We gratefully acknowledge the following people for their contributions to this project:
+
+## Maintainer
+- **Abdelrauf**  
+  - Role: Repository owner, core development  
+
+## Contributors
+- **Mikhail G. (heartical)**  
+  - Role: Feature development (ADR 002 – Implicit Array Encoding)  
+  - GitHub: [heartical](https://github.com/heartical)  
+
+---
+
+If you’ve contributed and don’t see your name here, please open a PR to add yourself!
+
 
 
 ## Encoding Example
