@@ -33,7 +33,7 @@ func TestBuildSchema_WithRepeatTuples(t *testing.T) {
 	}
 
 	// Build schema from JSON
-	built := BuildSchema(&schemaJSON)
+	built := MustBuildSchema(&schemaJSON)
 
 	// Manually constructed schema
 	expected := SRepeat(1, -1,
@@ -66,7 +66,7 @@ func TestBuildSchema_NamedTuple(t *testing.T) {
 		VariableLength: true,
 	}
 
-	built := BuildSchema(&schemaJSON)
+	built := MustBuildSchema(&schemaJSON)
 
 	expected := STupleNamedVal(
 		[]string{"id", "name", "active"},

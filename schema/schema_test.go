@@ -1362,7 +1362,7 @@ func TestSDate_SuccessAndNullable(t *testing.T) {
 
 	// Case 1: valid date inside range
 	validDate := time.Date(2025, 9, 10, 0, 0, 0, 0, time.UTC)
-	actual := pack.Pack(pack.PackInt64(validDate.Unix()))
+	actual := pack.Pack(pack.PackTime(validDate))
 
 	err := ValidateBuffer(actual, dateSchema)
 	require.NoError(t, err, "Validation should succeed for date within range")

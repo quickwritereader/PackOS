@@ -133,6 +133,10 @@ func CheckIntRange(val int64, min *int64, max *int64) error {
 	return CheckRange(val, min, max)
 }
 
+func CheckUintRange(val uint64, min *uint64, max *uint64) error {
+	return CheckRange(val, min, max)
+}
+
 // For float64
 func CheckFloatRange(val float64, min *float64, max *float64) error {
 	return CheckRange(val, min, max)
@@ -192,6 +196,10 @@ const (
 	SchemaInt16Name                  = "SchemaInt16"
 	SchemaInt32Name                  = "SchemaInt32"
 	SchemaInt64Name                  = "SchemaInt64"
+	SchemaUint8Name                  = "SchemaUint8Name"
+	SchemaUint16Name                 = "SchemaUint16Name"
+	SchemaUint32Name                 = "SchemaUint32Name"
+	SchemaUint64Name                 = "SchemaUint64Name"
 	SchemaFloat32Name                = "SchemaFloat32"
 	SchemaFloat64Name                = "SchemaFloat64"
 	SchemaNamedChainName             = "SchemaNamedChain"
@@ -201,6 +209,7 @@ const (
 	SchemaEnumNamedListName          = "SchemaEnumNamedList"
 	SchemaNumberName                 = "SchemaNumber"
 	ChainName                        = "SchemaChain"
+	SCheckboxBoolName                = "SCheckboxBoolName"
 
 	TupleSchemaName      = "TupleSchema"
 	TupleSchemaNamedName = "TupleSchemaNamed"
@@ -692,6 +701,74 @@ func (s SchemaInt64) Decode(seq *access.SeqGetAccess) (any, error) {
 }
 func (s SchemaInt64) IsNullable() bool { return s.Nullable }
 
+type SchemaUint8 struct{ Nullable bool }
+
+func (s SchemaUint8) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(SchemaUint8Name, seq, typetags.TypeInteger, 1, s.Nullable)
+}
+func (s SchemaUint8) Decode(seq *access.SeqGetAccess) (any, error) {
+	payload, err := validatePrimitiveAndGetPayload(SchemaUint8Name, seq, typetags.TypeInteger, 1, s.Nullable)
+	if err != nil {
+		return nil, err
+	}
+	if payload == nil {
+		return nil, nil
+	}
+	return uint8(payload[0]), nil
+}
+func (s SchemaUint8) IsNullable() bool { return s.Nullable }
+
+type SchemaUint16 struct{ Nullable bool }
+
+func (s SchemaUint16) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(SchemaUint16Name, seq, typetags.TypeInteger, 2, s.Nullable)
+}
+func (s SchemaUint16) Decode(seq *access.SeqGetAccess) (any, error) {
+	payload, err := validatePrimitiveAndGetPayload(SchemaUint16Name, seq, typetags.TypeInteger, 2, s.Nullable)
+	if err != nil {
+		return nil, err
+	}
+	if payload == nil {
+		return nil, nil
+	}
+	return binary.LittleEndian.Uint16(payload), nil
+}
+func (s SchemaUint16) IsNullable() bool { return s.Nullable }
+
+type SchemaUint32 struct{ Nullable bool }
+
+func (s SchemaUint32) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(SchemaUint32Name, seq, typetags.TypeInteger, 4, s.Nullable)
+}
+func (s SchemaUint32) Decode(seq *access.SeqGetAccess) (any, error) {
+	payload, err := validatePrimitiveAndGetPayload(SchemaUint32Name, seq, typetags.TypeInteger, 4, s.Nullable)
+	if err != nil {
+		return nil, err
+	}
+	if payload == nil {
+		return nil, nil
+	}
+	return binary.LittleEndian.Uint32(payload), nil
+}
+func (s SchemaUint32) IsNullable() bool { return s.Nullable }
+
+type SchemaUint64 struct{ Nullable bool }
+
+func (s SchemaUint64) Validate(seq *access.SeqGetAccess) error {
+	return validatePrimitive(SchemaUint64Name, seq, typetags.TypeInteger, 8, s.Nullable)
+}
+func (s SchemaUint64) Decode(seq *access.SeqGetAccess) (any, error) {
+	payload, err := validatePrimitiveAndGetPayload(SchemaUint64Name, seq, typetags.TypeInteger, 8, s.Nullable)
+	if err != nil {
+		return nil, err
+	}
+	if payload == nil {
+		return nil, nil
+	}
+	return binary.LittleEndian.Uint64(payload), nil
+}
+func (s SchemaUint64) IsNullable() bool { return s.Nullable }
+
 type SchemaFloat32 struct{ Nullable bool }
 
 func (s SchemaFloat32) Validate(seq *access.SeqGetAccess) error {
@@ -804,6 +881,54 @@ func (s SchemaInt64) Encode(put *access.PutAccess, val any) error {
 	return NewSchemaError(ErrEncode, SchemaInt64Name, "", -1, ErrTypeMisMatch)
 }
 
+func (s SchemaUint8) Encode(put *access.PutAccess, val any) error {
+	if s.Nullable && val == nil {
+		put.AddNullableUint8(nil)
+		return nil
+	}
+	if v, ok := val.(uint8); ok {
+		put.AddUint8(v)
+		return nil
+	}
+	return NewSchemaError(ErrEncode, SchemaUint8Name, "", -1, ErrTypeMisMatch)
+}
+
+func (s SchemaUint16) Encode(put *access.PutAccess, val any) error {
+	if s.Nullable && val == nil {
+		put.AddNullableUint16(nil)
+		return nil
+	}
+	if v, ok := val.(uint16); ok {
+		put.AddUint16(v)
+		return nil
+	}
+	return NewSchemaError(ErrEncode, SchemaUint16Name, "", -1, ErrTypeMisMatch)
+}
+
+func (s SchemaUint32) Encode(put *access.PutAccess, val any) error {
+	if s.Nullable && val == nil {
+		put.AddNullableUint32(nil)
+		return nil
+	}
+	if v, ok := val.(uint32); ok {
+		put.AddUint32(v)
+		return nil
+	}
+	return NewSchemaError(ErrEncode, SchemaUint32Name, "", -1, ErrTypeMisMatch)
+}
+
+func (s SchemaUint64) Encode(put *access.PutAccess, val any) error {
+	if s.Nullable && val == nil {
+		put.AddNullableUint64(nil)
+		return nil
+	}
+	if v, ok := val.(uint64); ok {
+		put.AddUint64(v)
+		return nil
+	}
+	return NewSchemaError(ErrEncode, SchemaUint64Name, "", -1, ErrTypeMisMatch)
+}
+
 func (s SchemaFloat32) Encode(put *access.PutAccess, val any) error {
 	if s.Nullable && val == nil {
 		put.AddNullableFloat32(nil)
@@ -833,11 +958,16 @@ func SType(tag typetags.Type) Schema {
 }
 
 var (
-	SBool         Schema       = SchemaBool{}
-	SInt8         Schema       = SchemaInt8{}
-	SInt16        SchemaInt16  = SchemaInt16{}
-	SInt32        SchemaInt32  = SchemaInt32{}
-	SInt64        SchemaInt64  = SchemaInt64{}
+	SBool   Schema       = SchemaBool{}
+	SInt8   Schema       = SchemaInt8{}
+	SInt16  SchemaInt16  = SchemaInt16{}
+	SInt32  SchemaInt32  = SchemaInt32{}
+	SInt64  SchemaInt64  = SchemaInt64{}
+	SUint8  SchemaUint8  = SchemaUint8{}
+	SUint16 SchemaUint16 = SchemaUint16{}
+	SUint32 SchemaUint32 = SchemaUint32{}
+	SUint64 SchemaUint64 = SchemaUint64{}
+
 	SFloat32      Schema       = SchemaFloat32{}
 	SFloat64      Schema       = SchemaFloat64{}
 	SNumber       Schema       = SchemaNumber{}
@@ -1308,6 +1438,135 @@ func (s SchemaInt64) Range(min, max *int64) Schema {
 	}
 }
 
+func (s SchemaUint16) RangeValues(min, max uint64) Schema {
+	return s.Range(&min, &max)
+}
+func (s SchemaUint16) Range(min, max *uint64) Schema {
+	return SchemaGeneric{
+		ValidateFunc: func(seq *access.SeqGetAccess) error {
+			pos := seq.CurrentIndex()
+			payload, err := validatePrimitiveAndGetPayload(SchemaUint16Name, seq, typetags.TypeInteger, 2, false)
+			if err != nil {
+				return err
+			}
+			val := binary.LittleEndian.Uint16(payload)
+			if err := CheckUintRange(uint64(val), min, max); err != nil {
+				return NewSchemaError(ErrOutOfRange, SchemaUint16Name, "", pos, err)
+			}
+			return nil
+		},
+		DecodeFunc: func(seq *access.SeqGetAccess) (any, error) {
+			pos := seq.CurrentIndex()
+			payload, err := validatePrimitiveAndGetPayload(SchemaUint16Name, seq, typetags.TypeInteger, 2, false)
+			if err != nil {
+				return nil, err
+			}
+			val := binary.LittleEndian.Uint16(payload)
+			if err := CheckUintRange(uint64(val), min, max); err != nil {
+				return nil, NewSchemaError(ErrOutOfRange, SchemaUint16Name, "", pos, err)
+			}
+			return val, nil
+		},
+		EncodeFunc: func(put *access.PutAccess, val any) error {
+			if value, ok := val.(uint16); ok {
+				if err := CheckUintRange(uint64(value), min, max); err != nil {
+					return NewSchemaError(ErrOutOfRange, SchemaUint16Name, "", -1, err)
+				}
+				put.AddUint16(value)
+			} else {
+				return NewSchemaError(ErrEncode, SchemaUint16Name, "", -1, ErrTypeMisMatch)
+			}
+			return nil
+		},
+	}
+}
+
+func (s SchemaUint32) RangeValues(min, max uint64) Schema {
+	return s.Range(&min, &max)
+}
+func (s SchemaUint32) Range(min, max *uint64) Schema {
+	return SchemaGeneric{
+		ValidateFunc: func(seq *access.SeqGetAccess) error {
+			pos := seq.CurrentIndex()
+			payload, err := validatePrimitiveAndGetPayload(SchemaUint32Name, seq, typetags.TypeInteger, 4, false)
+			if err != nil {
+				return err
+			}
+			val := binary.LittleEndian.Uint32(payload)
+			if err := CheckUintRange(uint64(val), min, max); err != nil {
+				return NewSchemaError(ErrOutOfRange, SchemaUint32Name, "", pos, err)
+			}
+			return nil
+		},
+		DecodeFunc: func(seq *access.SeqGetAccess) (any, error) {
+			pos := seq.CurrentIndex()
+			payload, err := validatePrimitiveAndGetPayload(SchemaUint32Name, seq, typetags.TypeInteger, 4, false)
+			if err != nil {
+				return nil, err
+			}
+			val := binary.LittleEndian.Uint32(payload)
+			if err := CheckUintRange(uint64(val), min, max); err != nil {
+				return nil, NewSchemaError(ErrOutOfRange, SchemaUint32Name, "", pos, err)
+			}
+			return val, nil
+		},
+		EncodeFunc: func(put *access.PutAccess, val any) error {
+			if value, ok := val.(uint32); ok {
+				if err := CheckUintRange(uint64(value), min, max); err != nil {
+					return NewSchemaError(ErrOutOfRange, SchemaUint32Name, "", -1, err)
+				}
+				put.AddUint32(value)
+			} else {
+				return NewSchemaError(ErrEncode, SchemaUint32Name, "", -1, ErrTypeMisMatch)
+			}
+			return nil
+		},
+	}
+}
+
+func (s SchemaUint64) RangeValues(min, max uint64) Schema {
+	return s.Range(&min, &max)
+}
+func (s SchemaUint64) Range(min, max *uint64) Schema {
+	return SchemaGeneric{
+		ValidateFunc: func(seq *access.SeqGetAccess) error {
+			pos := seq.CurrentIndex()
+			payload, err := validatePrimitiveAndGetPayload(SchemaUint64Name, seq, typetags.TypeInteger, 8, false)
+			if err != nil {
+				return err
+			}
+			val := binary.LittleEndian.Uint64(payload)
+			if err := CheckUintRange(val, min, max); err != nil {
+				return NewSchemaError(ErrOutOfRange, SchemaUint64Name, "", pos, err)
+			}
+			return nil
+		},
+		DecodeFunc: func(seq *access.SeqGetAccess) (any, error) {
+			pos := seq.CurrentIndex()
+			payload, err := validatePrimitiveAndGetPayload(SchemaUint64Name, seq, typetags.TypeInteger, 8, false)
+			if err != nil {
+				return nil, err
+			}
+			val := binary.LittleEndian.Uint64(payload)
+			if err := CheckUintRange(val, min, max); err != nil {
+				return nil, NewSchemaError(ErrOutOfRange, SchemaUint64Name, "", pos, err)
+			}
+			return val, nil
+		},
+		EncodeFunc: func(put *access.PutAccess, val any) error {
+			if value, ok := val.(uint64); ok {
+				if err := CheckUintRange(value, min, max); err != nil {
+					return NewSchemaError(ErrOutOfRange, SchemaUint64Name, "", -1, err)
+				}
+				put.AddUint64(value)
+			} else {
+				return NewSchemaError(ErrEncode, SchemaUint64Name, "", -1, ErrTypeMisMatch)
+			}
+			return nil
+		},
+	}
+}
+
 func PtrToInt64[T constraints.Integer](val T) *int64 {
 	var v int64 = int64(val)
 	return &v
@@ -1318,10 +1577,10 @@ func (s SchemaInt64) DateRangeValues(from, to time.Time) Schema {
 func (s SchemaInt64) DateRange(from, to *time.Time) Schema {
 	var min, max *int64 = nil, nil
 	if from != nil {
-		min = PtrToInt64(from.Unix())
+		min = PtrToInt64(from.UnixNano())
 	}
 	if to != nil {
-		max = PtrToInt64(to.Unix())
+		max = PtrToInt64(to.UnixNano())
 	}
 
 	return SchemaGeneric{
@@ -2188,10 +2447,10 @@ func SDate(nullable bool, from, to time.Time) Schema {
 func SDateRange(nullable bool, from, to *time.Time) Schema {
 	var min, max *int64 = nil, nil
 	if from != nil {
-		min = PtrToInt64(from.Unix())
+		min = PtrToInt64(from.UnixNano())
 	}
 	if to != nil {
-		max = PtrToInt64(to.Unix())
+		max = PtrToInt64(to.UnixNano())
 	}
 
 	return SchemaGeneric{
@@ -2226,7 +2485,7 @@ func SDateRange(nullable bool, from, to *time.Time) Schema {
 				return nil, NewSchemaError(ErrDateOutOfRange, SchemaDateName, "", pos, err)
 			}
 			// decode as time.Time
-			return time.Unix(val, 0).UTC(), nil
+			return time.Unix(0, val).UTC(), nil
 		},
 		EncodeFunc: func(put *access.PutAccess, val any) error {
 			if nullable && val == nil {
@@ -2238,7 +2497,7 @@ func SDateRange(nullable bool, from, to *time.Time) Schema {
 			case int64:
 				ret = v
 			case time.Time:
-				ret = v.Unix()
+				ret = v.UnixNano()
 
 			default:
 				return NewSchemaError(ErrEncode, SchemaDateName, "", -1, ErrTypeMisMatch)
@@ -2340,6 +2599,41 @@ func SColor(nullable bool) Schema {
 	}
 	return s.Pattern(`^#(?:[0-9a-fA-F]{3}){1,2}$`)
 }
+
+type SCheckboxBool struct {
+	SchemaBool
+}
+
+func (s SCheckboxBool) Validate(seq *access.SeqGetAccess) error {
+	return s.SchemaBool.Validate(seq)
+}
+
+func (s SCheckboxBool) Decode(seq *access.SeqGetAccess) (any, error) {
+	return s.SchemaBool.Decode(seq)
+}
+
+func (s SCheckboxBool) Encode(put *access.PutAccess, val any) error {
+	if s.Nullable && val == nil {
+		put.AddNullableBool(nil)
+		return nil
+	}
+
+	switch value := val.(type) {
+	case string:
+		put.AddBool(value == "true")
+	case bool:
+		put.AddBool(value)
+	case int, byte:
+		put.AddBool(value == 1)
+	default:
+		return NewSchemaError(ErrEncode, SCheckboxBoolName, "", -1, ErrTypeMisMatch)
+
+	}
+
+	return nil
+}
+
+func (s SCheckboxBool) IsNullable() bool { return s.Nullable }
 
 type SchemaMapRepeat struct {
 	Key   Schema

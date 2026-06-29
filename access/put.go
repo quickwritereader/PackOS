@@ -188,6 +188,10 @@ func (p *PutAccess) AddBool(b bool) {
 	p.position = len(p.buf)
 }
 
+func (p *PutAccess) AddNull() {
+	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, typetags.EncodeHeader(p.position, typetags.TypeNull))
+}
+
 func (p *PutAccess) AddNullableInt8(v *int8) {
 
 	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, typetags.EncodeHeader(p.position, typetags.TypeInteger))
@@ -307,6 +311,14 @@ func (p *PutAccess) AddString(s string) {
 	p.AddBytes(b)
 }
 
+func (p *PutAccess) AddNullableString(s *string) {
+	if s == nil {
+		p.AddNull()
+	} else {
+		p.AddString(*s)
+	}
+}
+
 func (p *PutAccess) AddMap(m map[string][]byte) {
 
 	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, typetags.EncodeHeader(p.position, typetags.TypeMap))
@@ -382,15 +394,6 @@ func (p *PutAccess) AddAnyTupleSortedMap(m []interface{}, useNumeric bool) error
 	return nil
 }
 
-func (p *PutAccess) AddNull(m []interface{}) {
-	// encode tuple header
-	p.offsets = binary.LittleEndian.AppendUint16(
-		p.offsets,
-		typetags.EncodeHeader(p.position, typetags.TypeNull),
-	)
-
-}
-
 func (p *PutAccess) AddMapStr(m map[string]string) {
 
 	p.offsets = binary.LittleEndian.AppendUint16(p.offsets, typetags.EncodeHeader(p.position, typetags.TypeMap))
@@ -441,7 +444,7 @@ func packAnyValue(p *PutAccess, v any, useNumeric bool) error {
 	var err error = nil
 	switch val := v.(type) {
 	case nil:
-		p.AddNull(nil)
+		p.AddNull()
 	case string:
 		p.AddString(val)
 	case []byte:
@@ -499,7 +502,7 @@ func packAnyValueSortedMap(p *PutAccess, v any, useNumeric bool) error {
 	var err error = nil
 	switch val := v.(type) {
 	case nil:
-		p.AddNull(nil)
+		p.AddNull()
 	case string:
 		p.AddString(val)
 	case []byte:
@@ -738,7 +741,7 @@ func (p *PutAccess) AddNumericString(val string) error {
 // AddIntegerArray adds an integer array
 func (p *PutAccess) AddIntegerArray(values []int64) {
 	if len(values) == 0 {
-		p.AddNull(nil)
+		p.AddNull()
 		return
 	}
 
@@ -761,7 +764,7 @@ func (p *PutAccess) AddIntegerArray(values []int64) {
 // AddFloatArray adds a floating-point array
 func (p *PutAccess) AddFloatArray(values []float64) {
 	if len(values) == 0 {
-		p.AddNull(nil)
+		p.AddNull()
 		return
 	}
 

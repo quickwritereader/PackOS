@@ -1,6 +1,8 @@
 package packable
 
 import (
+	"time"
+
 	"github.com/quickwritereader/PackOS/access"
 	"github.com/quickwritereader/PackOS/typetags"
 )
@@ -87,6 +89,24 @@ func (p PackInt64) Write(buf []byte, pos int) int {
 }
 func (v PackInt64) PackInto(p *access.PutAccess) {
 	p.AddInt64(int64(v))
+}
+
+// PackTime implements the Packable interface for time.Time.
+// Encodes as int64 nanoseconds since epoch.
+type PackTime time.Time
+
+func (p PackTime) HeaderType() typetags.Type { return typetags.TypeInteger }
+func (p PackTime) ValueSize() int            { return 8 }
+
+func (p PackTime) Write(buf []byte, pos int) int {
+	// cast to time.Time and encode as int64 nanoseconds
+	t := time.Time(p)
+	return access.WriteInt64(buf, pos, t.UnixNano())
+}
+
+func (p PackTime) PackInto(pa *access.PutAccess) {
+	t := time.Time(p)
+	pa.AddInt64(t.UnixNano())
 }
 
 // PackUint64 implements the Packable interface for uint64.

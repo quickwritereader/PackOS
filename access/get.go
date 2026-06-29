@@ -57,12 +57,24 @@ func (g *GetAccess) rangeAt(pos int) (tp typetags.Type, start, end int) {
 	return
 }
 
+func (g *GetAccess) FieldCount() int {
+	return g.argCount - 1
+}
+
 func (g *GetAccess) GetBool(pos int) (bool, error) {
 	tp, start, end := g.rangeAt(pos)
 	if tp != typetags.TypeBool || end-start != 1 {
 		return false, errors.New("decode error")
 	}
 	return g.buf[start] != 0, nil
+}
+
+func (g *GetAccess) CheckNull(pos int) bool {
+	_, start, end := g.rangeAt(pos)
+	if end-start == 0 {
+		return true
+	}
+	return false
 }
 
 func (g *GetAccess) GetNullableBool(pos int) (*bool, error) {
@@ -354,6 +366,21 @@ func (g *GetAccess) GetCopyBytes(pos int) ([]byte, error) {
 	copy(cp, data)
 
 	return cp, nil
+}
+
+func (g *GetAccess) GetNullableString(pos int) (*string, error) {
+	tp, start, end := g.rangeAt(pos)
+	if end < start || tp != typetags.TypeString {
+		if tp == typetags.TypeNull {
+			return nil, nil
+		}
+		return nil, errors.New("decode error")
+	}
+	if tp == typetags.TypeNull {
+		return nil, nil
+	}
+	res := string(g.buf[start:end])
+	return &res, nil
 }
 
 // GetString decodes a string at position pos

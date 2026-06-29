@@ -266,7 +266,7 @@ func TestDefaultHugoConfigRoundTrip(t *testing.T) {
 	var SchemaJson SchemaJSON
 	require.NoError(t, json.Unmarshal([]byte(SchemaJsonStr), &SchemaJson), "failed to unmarshal config")
 
-	schain := schema.SChain(schema.BuildSchema(&SchemaJson))
+	schain := schema.SChain(schema.MustBuildSchema(&SchemaJson))
 
 	// Decode into generic map
 	var decoded map[string]any
@@ -391,7 +391,7 @@ func TestDefaultHugoConfigRoundTripMultiCheck(t *testing.T) {
 	var SchemaJson SchemaJSON
 	require.NoError(t, json.Unmarshal([]byte(SchemaJsonStr), &SchemaJson), "failed to unmarshal config")
 
-	schain := schema.SChain(schema.BuildSchema(&SchemaJson))
+	schain := schema.SChain(schema.MustBuildSchema(&SchemaJson))
 
 	// Decode into generic map
 	var decoded map[string]any
