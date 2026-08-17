@@ -58,7 +58,7 @@ func (g *GetAccess) rangeAt(pos int) (tp typetags.Type, start, end int) {
 }
 
 func (g *GetAccess) FieldCount() int {
-	return g.argCount - 1
+	return g.argCount
 }
 
 func (g *GetAccess) GetBool(pos int) (bool, error) {
