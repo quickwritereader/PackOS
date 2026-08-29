@@ -128,3 +128,23 @@ func TestSchemaJSONRoundTripNewStyle(t *testing.T) {
 	assert.JSONEq(t, newStyleJSON, string(marshaledOld))
 	assert.JSONEq(t, newStyleJSON, string(marshaledNew))
 }
+
+func TestRegisterSchemaTypeErrors(t *testing.T) {
+	// Test empty type name
+	err := RegisterSchemaType("", func(js *SchemaJSON) (Schema, error) { return nil, nil })
+	assert.ErrorIs(t, err, ErrEmptyTypeName)
+
+	// Test schema field name conflict
+	err = RegisterSchemaType("max", func(js *SchemaJSON) (Schema, error) { return nil, nil })
+	assert.ErrorIs(t, err, ErrTypeNameConflict)
+
+	// Test duplicate registration
+	typeName := "testCustomType"
+	dummyBuilder := func(js *SchemaJSON) (Schema, error) { return nil, nil }
+
+	err = RegisterSchemaType(typeName, dummyBuilder)
+	require.NoError(t, err)
+
+	err = RegisterSchemaType(typeName, dummyBuilder)
+	assert.ErrorIs(t, err, ErrTypeAlreadyRegistered)
+}

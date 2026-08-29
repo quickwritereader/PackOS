@@ -2,6 +2,7 @@ package schema
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -34,30 +35,60 @@ type SchemaJSON struct {
 // Key: type name (case-sensitive), Value: builder function.
 var customSchemaBuilders = map[string]func(*SchemaJSON) (Schema, error){}
 
+var schemaJSONKeys = map[string]bool{
+	"type":           true,
+	"fieldNames":     true,
+	"schema":         true,
+	"nullable":       true,
+	"variableLength": true,
+	"flatten":        true,
+	"width":          true,
+	"min":            true,
+	"max":            true,
+	"exact":          true,
+	"prefix":         true,
+	"suffix":         true,
+	"pattern":        true,
+	"dateFrom":       true,
+	"dateTo":         true,
+	"decodeDefault":  true,
+	"extra":          true,
+}
+
+var (
+	ErrEmptyTypeName         = errors.New("cannot register empty type name")
+	ErrTypeNameConflict      = errors.New("cannot register type name that conflicts with schema field")
+	ErrTypeAlreadyRegistered = errors.New("schema type already registered")
+)
+
 // RegisterSchemaType registers a custom Schema builder for a given type name.
 //
 // Usage:
 //
-//	schema.RegisterSchemaType("MyCustomType", func(js schema.SchemaJSON) schema.Schema {
+//	err := schema.RegisterSchemaType("MyCustomType", func(js *schema.SchemaJSON) (schema.Schema, error) {
 //	    // Build your own Schema based on js
-//	    return SString.WithWidth(js.Width) // or any custom logic
+//	    return SString.WithWidth(js.Width), nil
 //	})
 //
 // Notes:
 //   - Type names are case-sensitive ("MyCustomType" ≠ "mycustomtype").
-//   - Panics if the type name is already registered (built-in or custom).
+//   - Returns an error if the type name is empty, already registered, or conflicts with schema field keys.
 //   - Use UnregisterSchemaType to remove a custom type.
 //
 // This allows users to extend BuildSchema with their own typetags without
 // modifying the core switch.
-func RegisterSchemaType(typeName string, builder func(*SchemaJSON) (Schema, error)) {
+func RegisterSchemaType(typeName string, builder func(*SchemaJSON) (Schema, error)) error {
 	if typeName == "" {
-		panic("cannot register empty type name")
+		return ErrEmptyTypeName
+	}
+	if schemaJSONKeys[typeName] {
+		return fmt.Errorf("%w: %s", ErrTypeNameConflict, typeName)
 	}
 	if _, exists := customSchemaBuilders[typeName]; exists {
-		panic("schema type already registered: " + typeName)
+		return fmt.Errorf("%w: %s", ErrTypeAlreadyRegistered, typeName)
 	}
 	customSchemaBuilders[typeName] = builder
+	return nil
 }
 
 // UnregisterSchemaType removes a previously registered custom Schema builder.
