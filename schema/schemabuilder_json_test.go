@@ -1,9 +1,11 @@
 package schema
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuildSchema_WithRepeatTuples(t *testing.T) {
@@ -77,4 +79,52 @@ func TestBuildSchema_NamedTuple(t *testing.T) {
 
 	assert.EqualValues(t, expected, built,
 		"Built schema from JSON should equal manually constructed named tuple")
+}
+
+func TestSmallSchemaUnmarshal(t *testing.T) {
+	schemaJSONStr := `{"string": {"pattern": "^(https?://.*|/)$", "nullable": true}}`
+
+	var sj SchemaJSON
+	err := json.Unmarshal([]byte(schemaJSONStr), &sj)
+	require.NoError(t, err, "failed to unmarshal small schema")
+
+	assert.Equal(t, "string", sj.Type)
+	assert.Equal(t, "^(https?://.*|/)$", sj.Pattern)
+	assert.True(t, sj.Nullable)
+}
+
+func TestSchemaJSONRoundTripNewStyle(t *testing.T) {
+	oldStyleJSON := `{
+		"type": "tuple",
+		"variableLength": true,
+		"fieldNames": ["name"],
+		"schema": [
+			{ "type": "string", "pattern": "^[A-Z]" }
+		]
+	}`
+
+	newStyleJSON := `{
+		"tuple": {
+			"variableLength": true,
+			"fieldNames": ["name"],
+			"schema": [
+				{ "string": { "pattern": "^[A-Z]" } }
+			]
+		}
+	}`
+
+	var schemaOld SchemaJSON
+	require.NoError(t, json.Unmarshal([]byte(oldStyleJSON), &schemaOld))
+
+	var schemaNew SchemaJSON
+	require.NoError(t, json.Unmarshal([]byte(newStyleJSON), &schemaNew))
+
+	marshaledOld, err := json.Marshal(schemaOld)
+	require.NoError(t, err)
+
+	marshaledNew, err := json.Marshal(schemaNew)
+	require.NoError(t, err)
+
+	assert.JSONEq(t, newStyleJSON, string(marshaledOld))
+	assert.JSONEq(t, newStyleJSON, string(marshaledNew))
 }

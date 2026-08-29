@@ -416,3 +416,166 @@ func TestDefaultHugoConfigRoundTripMultiCheck(t *testing.T) {
 	assert.JSONEq(t, string(origJSON), string(roundTripJSON), "round-trip mismatch")
 
 }
+
+func TestDefaultHugoConfigRoundTripMultiCheckNewReadableJsonStr(t *testing.T) {
+	SchemaJsonStr := `
+	{
+    "tuple": {
+        "variableLength": true,
+        "fieldNames": [
+            "baseURL","title","theme","paginate","permalinks",
+            "outputs","menus","defaultContentLanguage",
+            "defaultContentLanguageInSubdir","languages"
+        ],
+        "schema": [
+            { "string": { "pattern": "^(https?://.*|/)$" } },
+            { "string": {} },
+            { "string": {} },
+            { "number": { "min": 1 } },
+            { 
+                "tuple": { 
+                    "fieldNames": ["blog"], 
+                    "schema": [
+                        { "string": { "pattern": "^/blog/" } }
+                    ] 
+                } 
+            },
+            { 
+                "tuple": { 
+                    "fieldNames": ["home","section","page","taxonomy","term"], 
+                    "schema": [
+                        { "multicheck": { "fieldNames": ["HTML","RSS","JSON","AMP"] } },
+                        { "multicheck": { "fieldNames": ["HTML","RSS","JSON","AMP"] } },
+                        { "multicheck": { "fieldNames": ["HTML","RSS","JSON","AMP"] } },
+                        { "multicheck": { "fieldNames": ["HTML","RSS","JSON","AMP"] } },
+                        { "multicheck": { "fieldNames": ["HTML","RSS","JSON","AMP"] } }
+                    ] 
+                } 
+            },
+            { 
+                "tuple": { 
+                    "fieldNames": ["main"], 
+                    "variableLength": true, 
+                    "schema": [
+                        { 
+                            "repeat": { 
+                                "min": 1, 
+                                "max": 1024, 
+                                "schema": [
+                                    { 
+                                        "tuple": { 
+                                            "fieldNames": ["identifier","name","url","weight"], 
+                                            "schema": [
+                                                { "string": {} },
+                                                { "string": {} },
+                                                { "string": {} },
+                                                { "number": { "min": 1 } }
+                                            ] 
+                                        } 
+                                    }
+                                ] 
+                            } 
+                        }
+                    ] 
+                } 
+            },
+            { "string": {} },
+            { "bool": {} },
+            { 
+                "mapRepeat": { 
+                    "min": 1, 
+                    "max": -1, 
+                    "schema": [
+                        { "string": {} },
+                        { 
+                            "tuple": { 
+                                "fieldNames": ["languageName","languageCode","contentDir","weight"], 
+                                "schema": [
+                                    { "string": {} },
+                                    { "string": {} },
+                                    { "string": {} },
+                                    { "number": { "min": 1 } }
+                                ] 
+                            } 
+                        }
+                    ] 
+                } 
+            }
+        ]
+    }
+}
+	`
+
+	// A minimal but valid Hugo config JSON
+	configJSON := `{
+		"baseURL": "https://example.com/",
+		"title": "My Hugo Site",
+		"theme": "ananke",
+		"paginate": 10,
+		"defaultContentLanguage": "en",
+		"defaultContentLanguageInSubdir": true,
+		"languages": {
+			"en": {
+				"languageName": "English",
+				"languageCode": "en-us",
+				"contentDir": "content/en",
+				"weight": 1
+			},
+			"fr": {
+				"languageName": "Français",
+				"languageCode": "fr-fr",
+				"contentDir": "content/fr",
+				"weight": 2
+			},
+			"ru": {
+				"languageName": "Русский",
+				"languageCode": "ru-ru",
+				"contentDir": "content/ru",
+				"weight": 3
+			}
+		},
+		"permalinks": {
+			"blog": "/blog/:slug/"
+		},
+		"outputs": {
+			"home": ["HTML", "RSS", "JSON", "AMP"],
+			"section": ["HTML", "RSS", "JSON"],
+			"page": ["HTML", "JSON", "AMP"],
+			"taxonomy": ["HTML", "RSS"],
+			"term": ["HTML", "RSS", "JSON"]
+		},
+		"menus": {
+			"main": [
+				{"identifier":"home","name":"Home","url":"/","weight":1},
+				{"identifier":"blog","name":"Blog","url":"/blog/","weight":2}
+			]
+		}
+	}`
+
+	var SchemaJson SchemaJSON
+	require.NoError(t, json.Unmarshal([]byte(SchemaJsonStr), &SchemaJson), "failed to unmarshal config")
+
+	schain := schema.SChain(schema.MustBuildSchema(&SchemaJson))
+
+	// Decode into generic map
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal([]byte(configJSON), &decoded), "failed to unmarshal config")
+
+	// Encode using your schema
+	encoded, err := schema.EncodeValue(decoded, schain)
+	require.NoError(t, err, "schema encode failed")
+
+	// Decode back using your schema
+	roundTrip, err := schema.DecodeBuffer(encoded, schain)
+	require.NoError(t, err, "schema decode failed")
+
+	// Marshal both original and round-trip to canonical JSON
+	origJSON, err := json.Marshal(decoded)
+	require.NoError(t, err, "failed to marshal original")
+
+	roundTripJSON, err := json.Marshal(roundTrip)
+	require.NoError(t, err, "failed to marshal roundTrip")
+
+	// Compare the JSON strings
+	assert.JSONEq(t, string(origJSON), string(roundTripJSON), "round-trip mismatch")
+}

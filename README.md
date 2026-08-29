@@ -577,3 +577,43 @@ func TestDefaultHugoConfigRoundTripMultiCheck(t *testing.T) {
 }
 ```
 
+#### New More Readable schema json style 
+```go
+func TestSchemaJSONRoundTripNewStyle(t *testing.T) {
+	oldStyleJSON := `{
+		"type": "tuple",
+		"variableLength": true,
+		"fieldNames": ["name"],
+		"schema": [
+			{ "type": "string", "pattern": "^[A-Z]" }
+		]
+	}`
+
+	newStyleJSON := `{
+		"tuple": {
+			"variableLength": true,
+			"fieldNames": ["name"],
+			"schema": [
+				{ "string": { "pattern": "^[A-Z]" } }
+			]
+		}
+	}`
+
+	var schemaOld SchemaJSON
+	require.NoError(t, json.Unmarshal([]byte(oldStyleJSON), &schemaOld))
+
+	var schemaNew SchemaJSON
+	require.NoError(t, json.Unmarshal([]byte(newStyleJSON), &schemaNew))
+
+	marshaledOld, err := json.Marshal(schemaOld)
+	require.NoError(t, err)
+
+	marshaledNew, err := json.Marshal(schemaNew)
+	require.NoError(t, err)
+
+	assert.JSONEq(t, newStyleJSON, string(marshaledOld))
+	assert.JSONEq(t, newStyleJSON, string(marshaledNew))
+}
+```
+
+

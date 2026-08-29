@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -448,4 +449,74 @@ func buildSchemas(list []SchemaJSON) ([]Schema, error) {
 		out[i] = s
 	}
 	return out, nil
+}
+
+func (s *SchemaJSON) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	// 1. Support old flat style: contains an explicit "type" key at the root
+	if typeVal, ok := raw["type"]; ok {
+		var typeStr string
+		if err := json.Unmarshal(typeVal, &typeStr); err != nil {
+			return fmt.Errorf("invalid type field: %w", err)
+		}
+		type auxiliary SchemaJSON
+		var aux auxiliary
+		if err := json.Unmarshal(data, &aux); err != nil {
+			return err
+		}
+		*s = SchemaJSON(aux)
+		s.Type = typeStr
+		return nil
+	}
+
+	// 2. Support new tag-as-key style: exactly 1 key which is the type name
+	if len(raw) == 1 {
+		for typeName, payload := range raw {
+			s.Type = typeName
+			if string(payload) == "null" || string(payload) == "" {
+				return nil
+			}
+			type auxiliary SchemaJSON
+			var aux auxiliary
+			if err := json.Unmarshal(payload, &aux); err != nil {
+				return fmt.Errorf("failed to parse options for type %q: %w", typeName, err)
+			}
+			*s = SchemaJSON(aux)
+			s.Type = typeName
+			return nil
+		}
+	}
+
+	return fmt.Errorf("invalid schema object format")
+}
+
+func (s SchemaJSON) MarshalJSON() ([]byte, error) {
+	if s.Type == "" {
+		return []byte("{}"), nil
+	}
+
+	type auxiliary SchemaJSON
+	aux := auxiliary(s)
+
+	bytes, err := json.Marshal(aux)
+	if err != nil {
+		return nil, err
+	}
+
+	var m map[string]any
+	if err := json.Unmarshal(bytes, &m); err != nil {
+		return nil, err
+	}
+
+	// Always marshal exclusively to the new tag-as-key format
+	delete(m, "type")
+	wrapped := map[string]any{
+		s.Type: m,
+	}
+
+	return json.Marshal(wrapped)
 }
