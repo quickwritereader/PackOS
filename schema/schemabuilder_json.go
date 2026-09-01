@@ -10,27 +10,27 @@ import (
 )
 
 type SchemaJSON struct {
-	Type           string       `json:"type"`
-	FieldNames     []string     `json:"fieldNames,omitempty"`
-	Schema         []SchemaJSON `json:"schema,omitempty"`
-	Nullable       bool         `json:"nullable,omitempty"`
-	VariableLength bool         `json:"variableLength,omitempty"`
-	Flatten        bool         `json:"flatten,omitempty"`
+	Type           string       `json:"type" yaml:"-"`
+	FieldNames     []string     `json:"fieldNames,omitempty" yaml:"fieldNames,omitempty"`
+	Schema         []SchemaJSON `json:"schema,omitempty" yaml:"schema,omitempty"`
+	Nullable       bool         `json:"nullable,omitempty" yaml:"nullable,omitempty"`
+	VariableLength bool         `json:"variableLength,omitempty" yaml:"variableLength,omitempty"`
+	Flatten        bool         `json:"flatten,omitempty" yaml:"flatten,omitempty"`
 
 	// Constraint helpers
-	Width         int    `json:"width,omitempty"`
-	Min           *int64 `json:"min,omitempty"`
-	Max           *int64 `json:"max,omitempty"`
-	Exact         string `json:"exact,omitempty"`
-	Prefix        string `json:"prefix,omitempty"`
-	Suffix        string `json:"suffix,omitempty"`
-	Pattern       string `json:"pattern,omitempty"`
-	DateFrom      string `json:"dateFrom,omitempty"`
-	DateTo        string `json:"dateTo,omitempty"`
-	DecodeDefault string `json:"decodeDefault,omitempty"`
+	Width         int    `json:"width,omitempty" yaml:"width,omitempty"`
+	Min           *int64 `json:"min,omitempty" yaml:"min,omitempty"`
+	Max           *int64 `json:"max,omitempty" yaml:"max,omitempty"`
+	Exact         string `json:"exact,omitempty" yaml:"exact,omitempty"`
+	Prefix        string `json:"prefix,omitempty" yaml:"prefix,omitempty"`
+	Suffix        string `json:"suffix,omitempty" yaml:"suffix,omitempty"`
+	Pattern       string `json:"pattern,omitempty" yaml:"pattern,omitempty"`
+	DateFrom      string `json:"dateFrom,omitempty" yaml:"dateFrom,omitempty"`
+	DateTo        string `json:"dateTo,omitempty" yaml:"dateTo,omitempty"`
+	DecodeDefault string `json:"decodeDefault,omitempty" yaml:"decodeDefault,omitempty"`
 
 	// Extra metadata for UI or other purposes
-	Extra map[string]any `json:"extra,omitempty"`
+	Extra map[string]any `json:"extra,omitempty" yaml:"extra,omitempty"`
 }
 
 // Registry of custom schema builders.

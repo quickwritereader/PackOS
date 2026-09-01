@@ -166,3 +166,48 @@ func TestSchemaYAML(t *testing.T) {
 
 	assert.Equal(t, original, decoded)
 }
+
+func TestSchemaJSON_TagAsKeyYAML(t *testing.T) {
+	yamlData := `
+tuple:
+  variableLength: false
+  flatten: true
+  fieldNames:
+    - config
+  schema:
+    - string: {}
+`
+
+	var s SchemaJSON
+	if err := yaml.Unmarshal([]byte(yamlData), &s); err != nil {
+		t.Fatalf("failed to unmarshal yaml: %v", err)
+	}
+
+	if s.Type != "tuple" {
+		t.Errorf("expected type 'tuple', got %q", s.Type)
+	}
+	if s.Flatten != true {
+		t.Errorf("expected flatten true, got %v", s.Flatten)
+	}
+	if len(s.FieldNames) != 1 || s.FieldNames[0] != "config" {
+		t.Errorf("unexpected fieldNames: %v", s.FieldNames)
+	}
+	if len(s.Schema) != 1 || s.Schema[0].Type != "string" {
+		t.Errorf("expected nested schema type 'string', got %v", s.Schema)
+	}
+
+	// Test marshaling back
+	outBytes, err := yaml.Marshal(&s)
+	if err != nil {
+		t.Fatalf("failed to marshal yaml: %v", err)
+	}
+
+	var roundtrip SchemaJSON
+	if err := yaml.Unmarshal(outBytes, &roundtrip); err != nil {
+		t.Fatalf("failed to unmarshal roundtrip yaml: %v", err)
+	}
+
+	if roundtrip.Type != "tuple" || roundtrip.Flatten != true {
+		t.Errorf("roundtrip failed: %+v", roundtrip)
+	}
+}
