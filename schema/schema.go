@@ -1887,7 +1887,7 @@ func (s TupleSchema) Decode(seq *access.SeqGetAccess) (any, error) {
 		return nil, NewSchemaError(ErrUnexpectedEOF, TupleSchemaName, "", pos, err)
 	}
 	if out == nil {
-		return nil, nil
+		return []any{}, nil
 	}
 	return out, nil
 }
@@ -1898,6 +1898,10 @@ func (s TupleSchema) Encode(put *access.PutAccess, val any) error {
 		return nil
 	}
 	if valArr, ok := val.([]any); ok {
+		if len(valArr) == 0 && s.Nullable {
+			put.AddAnyTuple(nil, false)
+			return nil
+		}
 
 		nested := put.BeginTuple()
 		defer put.EndNested(nested)
@@ -2054,7 +2058,7 @@ func (s TupleSchemaNamed) Decode(seq *access.SeqGetAccess) (any, error) {
 		return nil, NewSchemaError(ErrUnexpectedEOF, TupleSchemaNamedName, "", pos, err)
 	}
 	if out == nil {
-		return nil, nil
+		return map[string]any{}, nil
 	}
 	return out, nil
 }
@@ -2068,7 +2072,10 @@ func (s TupleSchemaNamed) Encode(put *access.PutAccess, val any) error {
 		return NewSchemaError(ErrConstraintViolated, TupleSchemaNamedName, "", 0, SizeExact{Actual: len(s.FieldNames), Exact: len(s.Schemas)})
 	}
 	if mapKV, ok := val.(map[string]any); ok {
-
+		if len(mapKV) == 0 && s.Nullable {
+			put.AddAnyTuple(nil, false)
+			return nil
+		}
 		nested := put.BeginTuple()
 		defer put.EndNested(nested)
 		for i, key := range s.FieldNames {

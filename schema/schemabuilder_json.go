@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 type SchemaJSON struct {
@@ -550,4 +552,74 @@ func (s SchemaJSON) MarshalJSON() ([]byte, error) {
 	}
 
 	return json.Marshal(wrapped)
+}
+
+func (s *SchemaJSON) UnmarshalYAML(unmarshal func(any) error) error {
+	var raw map[string]yaml.Node
+	if err := unmarshal(&raw); err != nil {
+		return err
+	}
+
+	// 1. Support old flat style: contains an explicit "type" key at the root
+	if typeNode, ok := raw["type"]; ok {
+		var typeStr string
+		if err := typeNode.Decode(&typeStr); err != nil {
+			return fmt.Errorf("invalid type field: %w", err)
+		}
+		type auxiliary SchemaJSON
+		var aux auxiliary
+		if err := unmarshal(&aux); err != nil {
+			return err
+		}
+		*s = SchemaJSON(aux)
+		s.Type = typeStr
+		return nil
+	}
+
+	// 2. Support new tag-as-key style: exactly 1 key which is the type name
+	if len(raw) == 1 {
+		for typeName, payload := range raw {
+			s.Type = typeName
+			if payload.Kind == yaml.ScalarNode && (payload.Value == "null" || payload.Value == "") {
+				return nil
+			}
+			type auxiliary SchemaJSON
+			var aux auxiliary
+			if err := payload.Decode(&aux); err != nil {
+				return fmt.Errorf("failed to parse options for type %q: %w", typeName, err)
+			}
+			*s = SchemaJSON(aux)
+			s.Type = typeName
+			return nil
+		}
+	}
+
+	return fmt.Errorf("invalid schema object format")
+}
+
+func (s SchemaJSON) MarshalYAML() (any, error) {
+	if s.Type == "" {
+		return map[string]any{}, nil
+	}
+
+	type auxiliary SchemaJSON
+	aux := auxiliary(s)
+
+	bytes, err := yaml.Marshal(aux)
+	if err != nil {
+		return nil, err
+	}
+
+	var m map[string]any
+	if err := yaml.Unmarshal(bytes, &m); err != nil {
+		return nil, err
+	}
+
+	// Always marshal exclusively to the new tag-as-key format
+	delete(m, "type")
+	wrapped := map[string]any{
+		s.Type: m,
+	}
+
+	return wrapped, nil
 }

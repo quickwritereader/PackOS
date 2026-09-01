@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func TestBuildSchema_WithRepeatTuples(t *testing.T) {
@@ -147,4 +148,21 @@ func TestRegisterSchemaTypeErrors(t *testing.T) {
 
 	err = RegisterSchemaType(typeName, dummyBuilder)
 	assert.ErrorIs(t, err, ErrTypeAlreadyRegistered)
+}
+func TestSchemaYAML(t *testing.T) {
+	original := SchemaJSON{
+		Type:       "string",
+		FieldNames: []string{},
+		Schema:     []SchemaJSON{},
+		Extra:      map[string]any{},
+	}
+
+	data, err := yaml.Marshal(original)
+	require.NoError(t, err)
+
+	var decoded SchemaJSON
+	err = yaml.Unmarshal(data, &decoded)
+	require.NoError(t, err)
+
+	assert.Equal(t, original, decoded)
 }

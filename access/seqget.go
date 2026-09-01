@@ -20,6 +20,34 @@ type SeqGetAccess struct {
 }
 
 func NewSeqGetAccess(buf []byte) (*SeqGetAccess, error) {
+	if len(buf) == 0 {
+		return &SeqGetAccess{
+			buf:           buf,
+			count:         1,
+			base:          0,
+			pos:           0,
+			currentOffset: 0,
+			currentType:   typetags.TypeEnd,
+			nextOffset:    0,
+			nextType:      typetags.TypeEnd,
+		}, nil
+	}
+	if len(buf) == 2 {
+		_, ct := typetags.DecodeHeader(binary.LittleEndian.Uint16(buf[0:]))
+		if ct != typetags.TypeEnd {
+			return nil, errors.New("invalid header: expected TypeEnd")
+		}
+		return &SeqGetAccess{
+			buf:           buf,
+			count:         1,
+			base:          2,
+			pos:           0,
+			currentOffset: 0,
+			currentType:   ct,
+			nextOffset:    0,
+			nextType:      ct,
+		}, nil
+	}
 	if len(buf) < 4 {
 		return nil, errors.New("insufficient header")
 	}
@@ -108,11 +136,17 @@ func (s *SeqGetAccess) PeekNestedSeq() (*SeqGetAccess, error) {
 	}
 
 	width := s.nextOffset - s.currentOffset
-	if width <= 0 || s.nextOffset > len(s.buf) {
+	if width < 0 || s.nextOffset > len(s.buf) {
 		return nil, fmt.Errorf("peekNestedSeq: invalid range %d → %d", s.currentOffset, s.nextOffset)
 	}
 
-	nestedBuf := s.buf[s.currentOffset:s.nextOffset]
+	var nestedBuf []byte
+	if width == 0 {
+		nestedBuf = []byte{}
+	} else {
+		nestedBuf = s.buf[s.currentOffset:s.nextOffset]
+	}
+
 	nested, err := NewSeqGetAccess(nestedBuf)
 	if err != nil {
 		return nil, fmt.Errorf("peekNestedSeq: failed to initialize nested accessor %w", err)

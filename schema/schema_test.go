@@ -1,11 +1,13 @@
 package schema
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/quickwritereader/PackOS/access"
+	"github.com/quickwritereader/PackOS/packable"
 	pack "github.com/quickwritereader/PackOS/packable"
 	"github.com/quickwritereader/PackOS/typetags"
 	"github.com/stretchr/testify/assert"
@@ -854,8 +856,8 @@ func TestEncodePackedEmptyTuples2(t *testing.T) {
 		STupleNamed(nil),
 		SInt16,
 	)
-
-	val := []any{int16(5), nil, nil, nil, nil, int16(5)}
+	// Before empty tuple returned nil, now it's updated to return empty slice, map for consistency with json roundtrip
+	val := []any{int16(5), []any{}, []any{}, map[string]any{}, map[string]any{}, int16(5)}
 
 	actual, err := EncodeValue(val, chain)
 	if err != nil {
@@ -867,6 +869,7 @@ func TestEncodePackedEmptyTuples2(t *testing.T) {
 	require.NoError(t, err)
 	assert.EqualValues(t, val, decoded)
 }
+
 func TestEncodeDecodePackedEmptyMap(t *testing.T) {
 	expected := pack.Pack(
 		pack.PackInt16(5),
@@ -1391,4 +1394,173 @@ func TestSDate_SuccessAndNullable(t *testing.T) {
 	decodedInvalid, err := DecodeBuffer(actualInvalid, dateSchema)
 	require.Error(t, err, "Decode should fail for out-of-range date")
 	require.Nil(t, decodedInvalid)
+}
+
+func TestEmptySequence(t *testing.T) {
+	schain := SChain(
+		SRepeat(0, 16, SString),
+	)
+
+	var decoded []any
+	require.NoError(t, json.Unmarshal([]byte("[]"), &decoded))
+
+	encoded, err := EncodeValue(decoded, schain)
+	require.NoError(t, err, "encoding empty sequence failed")
+
+	roundTrip, err := DecodeBuffer(encoded, schain)
+	require.NoError(t, err, "decoding empty sequence failed")
+
+	assert.Empty(t, roundTrip)
+}
+
+func TestEmptySequenceA(t *testing.T) {
+	schain := SChain(STuple(
+		STuple(),
+		STuple(),
+		STuple(),
+	))
+	var decoded []any
+	require.NoError(t, json.Unmarshal([]byte("[[], [], []]"), &decoded))
+
+	encoded, err := EncodeValue(decoded, schain)
+	require.NoError(t, err, "encoding empty sequence failed")
+
+	roundTrip, err := DecodeBuffer(encoded, schain)
+	require.NoError(t, err, "decoding empty sequence failed")
+
+	assert.NotEmpty(t, roundTrip)
+}
+
+func TestEmptySequenceV(t *testing.T) {
+	schain := SChain(STuple(
+		STuple(),
+		STuple(),
+		STuple(),
+	))
+	var decoded []any
+	require.NoError(t, json.Unmarshal([]byte("[[], [], []]"), &decoded))
+	packed := packable.Pack(
+		packable.PackTuple(
+			packable.PackTuple(),
+			packable.PackTuple(),
+			packable.PackTuple(),
+		),
+	)
+
+	encoded, err := EncodeValue(decoded, schain)
+	require.NoError(t, err, "encoding empty sequence failed")
+
+	assert.Equal(t, packed, encoded, "Encoded value should match expected packed structure")
+
+	assert.Equal(t, len(packed), len(encoded), "Three empty tuples should result in exactly packed bytes")
+
+	roundTrip, err := DecodeBuffer(encoded, schain)
+	require.NoError(t, err, "decoding empty sequence failed")
+
+	assert.NotEmpty(t, roundTrip)
+}
+
+func TestMixedEmptyAndNonEmptyTuples(t *testing.T) {
+	schain := SChain(STuple(
+		STuple(SNumber),
+		STuple(),
+		STuple(SNumber),
+	))
+
+	var decoded []any
+	require.NoError(t, json.Unmarshal([]byte("[[1], [], [2]]"), &decoded))
+
+	encoded, err := EncodeValue(decoded, schain)
+	require.NoError(t, err, "encoding mixed tuples failed")
+
+	roundTrip, err := DecodeBuffer(encoded, schain)
+	require.NoError(t, err, "decoding mixed tuples failed")
+
+	rtSlice, ok := roundTrip.([]any)
+	require.True(t, ok)
+	require.Len(t, rtSlice, 3)
+
+	emptyInner, ok := rtSlice[1].([]any)
+	require.True(t, ok)
+	assert.Empty(t, emptyInner)
+}
+
+func TestCSPConfigRoundTripExplicit(t *testing.T) {
+	configJSON := `[
+			{
+				"prefix": "/",
+				"apply_rule": "CSP_FULL",
+				"script_src": ["'self'", "https://unpkg.com"],
+				"style_src": ["'self'", "https://fonts.googleapis.com", "https://adobe-fonts.github.io"],
+				"font_src": ["'self'", "https://fonts.gstatic.com", "https://adobe-fonts.github.io"],
+				"object_src": ["'self'"],
+				"img_src": ["'self'", "data:"],
+				"frame_ancestors": ["'self'"],
+				"worker_src": []
+			},
+						{
+				"prefix": "/",
+				"apply_rule": "CSP_FULL",
+				"script_src": ["'self'", "https://unpkg.com"],
+				"style_src": ["'self'", "https://fonts.googleapis.com", "https://adobe-fonts.github.io"],
+				"font_src": ["'self'", "https://fonts.gstatic.com", "https://adobe-fonts.github.io"],
+				"object_src": ["'self'"],
+				"img_src": ["'self'", "data:"],
+				"frame_ancestors": ["'self'"],
+				"worker_src": ["'self'"]
+			} 
+	]`
+
+	cspSchema := SChain(
+		STupleValFlatten(
+			SRepeat(0, 16,
+				STupleNamedValFlattened(
+					[]string{
+						"prefix",
+						"apply_rule",
+						"script_src",
+						"style_src",
+						"font_src",
+						"object_src",
+						"img_src",
+						"frame_ancestors",
+						"worker_src",
+					},
+					SString,
+					SEnum([]string{
+						"CSP_NONE",
+						"CSP_REPORT_ONLY",
+						"CSP_FULL",
+						"CSP_REPORT_ONLY_NO_NONCE",
+						"CSP_FULL_NO_NONCE",
+					}, false),
+					STupleValFlatten(SRepeat(0, 16, SString.Pattern("^(?:'self'|data:|blob:?|https?://.*)$"))),
+					STupleValFlatten(SRepeat(0, 16, SString.Pattern("^(?:'self'|data:|blob:?|https?://.*)$"))),
+					STupleValFlatten(SRepeat(0, 16, SString.Pattern("^(?:'self'|data:|blob:?|https?://.*)$"))),
+					STupleValFlatten(SRepeat(0, 16, SString.Pattern("^(?:'self'|data:|blob:?|https?://.*)$"))),
+					STupleValFlatten(SRepeat(0, 16, SString.Pattern("^(?:'self'|data:|blob:?|https?://.*)$"))),
+					STupleValFlatten(SRepeat(0, 16, SString.Pattern("^(?:'self'|data:|blob:?|https?://.*)$"))),
+					STupleValFlatten(SRepeat(0, 16, SString.Pattern("^(?:'self'|data:|blob:?|https?://.*)$"))),
+				)),
+		))
+
+	var decoded any
+	require.NoError(t, json.Unmarshal([]byte(configJSON), &decoded), "failed to unmarshal config")
+
+	encoded, err := EncodeValue(decoded, cspSchema)
+	require.NoError(t, err, "schema encode failed")
+
+	ret, err := access.Decode(encoded)
+	fmt.Printf("Decoded Any: %v\n", ret)
+
+	roundTrip, err := DecodeBuffer(encoded, cspSchema)
+	require.NoError(t, err, "schema decode failed")
+
+	origJSON, err := json.Marshal(decoded)
+	require.NoError(t, err, "failed to marshal original")
+
+	roundTripJSON, err := json.Marshal(roundTrip)
+	require.NoError(t, err, "failed to marshal roundTrip")
+
+	assert.JSONEq(t, string(origJSON), string(roundTripJSON), "round-trip mismatch")
 }

@@ -254,3 +254,59 @@ func TestPackable_TestPutAccessWithPackOrdered(t *testing.T) {
 		assert.Equalf(t, expected[i], actual[i], "Byte %d mismatch: expected %02X, got %02X", i, expected[i], actual[i])
 	}
 }
+
+func TestPackable_EmptyNestedTuplesAndGetSeq(t *testing.T) {
+	actual := Pack(
+		PackTuple(), // Empty tuple 1
+		PackTuple(
+			PackTuple(), // Nested empty tuple inside tuple 2
+		),
+	)
+
+	seq, err := access.NewSeqGetAccess(actual)
+	require.NoError(t, err)
+	require.NotNil(t, seq)
+	assert.Equal(t, 2, seq.ArgCount())
+
+	// Peek and access Tuple 1 (empty)
+	nested1, err := seq.PeekNestedSeq()
+	require.NoError(t, err)
+	assert.Equal(t, 0, nested1.ArgCount())
+
+	// Advance to Tuple 2
+	err = seq.Advance()
+	require.NoError(t, err)
+
+	// Peek and access Tuple 2
+	nested2, err := seq.PeekNestedSeq()
+	require.NoError(t, err)
+	assert.Equal(t, 1, nested2.ArgCount())
+
+	// Peek and access the inner empty tuple inside Tuple 2
+	innerNested, err := nested2.PeekNestedSeq()
+	require.NoError(t, err)
+	assert.Equal(t, 0, innerNested.ArgCount())
+}
+
+func TestPackable_ThreeEmptyTuplesBytes(t *testing.T) {
+	actual := Pack(
+		PackTuple(),
+		PackTuple(),
+		PackTuple(),
+	)
+
+	assert.Equal(t, 8, len(actual), "Three empty tuples should result in exactly 8 bytes")
+
+	seq, err := access.NewSeqGetAccess(actual)
+	require.NoError(t, err)
+	assert.Equal(t, 3, seq.ArgCount())
+
+	for i := range 3 {
+		nested, err := seq.PeekNestedSeq()
+		require.NoError(t, err)
+		assert.Equal(t, 0, nested.ArgCount())
+		if i < 2 {
+			require.NoError(t, seq.Advance())
+		}
+	}
+}

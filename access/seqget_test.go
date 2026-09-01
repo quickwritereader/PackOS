@@ -149,3 +149,69 @@ func TestSeqGetAccess_ExplicitByteMatch(t *testing.T) {
 	require.Error(t, err)
 
 }
+
+func TestSeqGetAccess_TypeEndEmpty(t *testing.T) {
+	// Buffer representing an empty sequence or typeEnd sentinel
+	input := []byte{0x38, 0x00} // TypeEnd representation or empty sequence marker
+
+	seq, err := NewSeqGetAccess(input)
+	require.NoError(t, err)
+	require.NotNil(t, seq)
+	assert.Equal(t, 0, seq.ArgCount())
+}
+
+func TestSeqGetAccess_Empty(t *testing.T) {
+
+	// Test with a completely empty buffer as well
+	emptyBuf := []byte{}
+	seqEmpty, err := NewSeqGetAccess(emptyBuf)
+	require.NoError(t, err)
+	require.NotNil(t, seqEmpty)
+	assert.Equal(t, 0, seqEmpty.ArgCount())
+}
+func TestNewSeqGetAccess_MalformedAndEmpty(t *testing.T) {
+	// 1. Completely empty buffer should return a zero-count accessor
+	seqEmpty, err := NewSeqGetAccess([]byte{})
+	require.NoError(t, err)
+	require.NotNil(t, seqEmpty)
+	assert.Equal(t, 0, seqEmpty.ArgCount())
+	assert.Equal(t, 0, seqEmpty.CurrentIndex())
+	assert.Equal(t, []byte{}, seqEmpty.UnderlineBuffer())
+
+	// Test methods on empty accessor
+	typ, width, err := seqEmpty.PeekTypeWidth()
+	require.NoError(t, err)
+	assert.Equal(t, typetags.TypeEnd, typ)
+	assert.Equal(t, 0, width)
+
+	err = seqEmpty.Advance()
+	require.Error(t, err, "Advance on empty accessor should fail")
+
+	// 2. Insufficient header lengths (< 4 bytes, not empty and not 2-byte TypeEnd)
+	_, err = NewSeqGetAccess([]byte{0x01})
+	require.Error(t, err, "1-byte buffer should fail with insufficient header")
+
+	_, err = NewSeqGetAccess([]byte{0x01, 0x02, 0x03})
+	require.Error(t, err, "3-byte buffer should fail with insufficient header")
+
+	// 3. 2-byte header with a type other than TypeEnd should fail
+	malformedTwoBytes := []byte{0x01, 0x00}
+	_, err = NewSeqGetAccess(malformedTwoBytes)
+	require.Error(t, err, "2-byte buffer with non-TypeEnd type should fail")
+}
+
+func TestSeqGetAccess_TypeEndOnlyMethods(t *testing.T) {
+	// Simulating a 2-byte TypeEnd buffer directly if encoded properly,
+	// or testing the behavior when initialized via empty buffer.
+	input := []byte{0x38, 0x00} // TypeEnd representation or empty sequence marker
+	seq, err := NewSeqGetAccess(input)
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, seq.ArgCount())
+	assert.Equal(t, 0, seq.CurrentIndex())
+	assert.NotNil(t, seq.UnderlineBuffer())
+
+	payload, err := seq.GetPayload(0)
+	require.NoError(t, err)
+	assert.Empty(t, payload)
+}
