@@ -22,16 +22,18 @@ const (
 	TypeMap                  Type = 7
 )
 
-// Extended container constants
+// Extended container constants (ADR 001)
 const (
-	ExtendedContainerValueSize = 4 // 4 bytes continuation
-	EndOfChain                 = 0xFFFFFFFF
+	ExtendedContainerValueSize = 4 // NextSegmentOffset only; no self offset or self check for now
+	EndOfChain                 = 0 // NextSegmentOffset of the last segment: the root starts at 0, so 0 can never point at a segment
 )
 
-// ExtendedContainerValue represents the 4-byte management block for extended containers
+// ExtendedContainerValue represents the 4-byte management block that opens every
+// TypeExtendedTagContainer payload. A placeholder holds nothing else; a data
+// segment follows it with an inner container carrying one chunk of the value,
+// so the size of the element tells whether it carries a chunk.
 type ExtendedContainerValue struct {
-	Continuation uint32 // Absolute 32-bit offset to next segment (or EndOfChain)
-	// SelfOffset   uint32 // Absolute 32-bit address for validation
+	NextSegmentOffset uint32 // Absolute 32-bit offset of the next segment, or EndOfChain
 }
 
 // IsArray determines whether the payload is an array
