@@ -216,10 +216,60 @@ func TestExtendedPutAccess_FloatArrayChunksCarryTheirElementSize(t *testing.T) {
 	assert.Equal(t, values, decoded)
 }
 
+// ADR 001 exists because a 13-bit delta cannot address more than 8 KB: a value
+// past that limit is split at MaxChunkSize, and its segments are linked with
+// full 32-bit offsets that reach beyond what the root could address.
+func TestExtendedPutAccess_ValuesBeyondThe13BitLimitSpanSegments(t *testing.T) {
+	cases := []struct {
+		name     string
+		size     int
+		segments int
+	}{
+		{"largest single chunk", MaxChunkSize, 1},
+		{"one byte past a chunk", MaxChunkSize + 1, 2},
+		{"one byte past the 13-bit limit", MaxSegmentSize + 1, 2},
+		{"three chunks", 2*MaxChunkSize + 1, 3},
+		{"64 KiB", 64 * 1024, 9},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			data := make([]byte, tc.size)
+			for i := range data {
+				data[i] = byte(i) // position-dependent, so a misplaced chunk is caught
+			}
+			put := NewExtendedPutAccess(0)
+			put.AddBytes(data)
+
+			buf, err := put.PackExtended()
+			require.NoError(t, err)
+			assert.Equal(t, tc.segments, put.SegmentCount())
+
+			root := NewGetAccess(buf)
+			require.NotNil(t, root)
+			tp, link := root.GetTypeAndValue(0)
+			require.Equal(t, typetags.TypeExtendedTagContainer, tp)
+
+			chunks := followChain(t, buf, binary.LittleEndian.Uint32(link))
+			require.Len(t, chunks, tc.segments)
+			var joined []byte
+			for _, c := range chunks {
+				assert.LessOrEqual(t, len(c.data), MaxChunkSize)
+				joined = append(joined, c.data...)
+			}
+			assert.Equal(t, data, joined)
+			if tc.segments > 1 {
+				assert.Greater(t, int(chunks[len(chunks)-1].offset), MaxSegmentSize-1,
+					"the last segment lies beyond the 13-bit range and is reached through 32-bit links")
+			}
+		})
+	}
+}
+
 // chainChunk is one data segment of a chain, as read back with GetAccess.
 type chainChunk struct {
-	tag  typetags.Type
-	data []byte
+	offset uint32 // absolute offset of the segment in the buffer
+	tag    typetags.Type
+	data   []byte
 }
 
 // followChain reads the data segments of a chain starting at an absolute
@@ -240,7 +290,7 @@ func followChain(t *testing.T, buf []byte, offset uint32) []chainChunk {
 		require.NotNil(t, inner)
 		require.Equal(t, 1, inner.FieldCount())
 		innerType, data := inner.GetTypeAndValue(0)
-		chunks = append(chunks, chainChunk{tag: innerType, data: data})
+		chunks = append(chunks, chainChunk{offset: offset, tag: innerType, data: data})
 
 		offset = binary.LittleEndian.Uint32(val)
 	}
