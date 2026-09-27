@@ -149,7 +149,9 @@ func TestRegisterSchemaTypeErrors(t *testing.T) {
 	err = RegisterSchemaType(typeName, dummyBuilder)
 	assert.ErrorIs(t, err, ErrTypeAlreadyRegistered)
 }
+
 func TestSchemaYAML(t *testing.T) {
+	// Original struct defined with empty slices
 	original := SchemaJSON{
 		Type:       "string",
 		FieldNames: []string{},
@@ -164,7 +166,17 @@ func TestSchemaYAML(t *testing.T) {
 	err = yaml.Unmarshal(data, &decoded)
 	require.NoError(t, err)
 
-	assert.Equal(t, original, decoded)
+	// Expected struct normalized to nil slices:
+	// YAML unmarshaling decodes empty arrays/omitted keys into nil ([]T(nil)) instead of initialized empty slices ([]T{}).
+	// Since nil and []T{} are functionally equivalent in Go, this difference can be safely ignored.
+	expected := SchemaJSON{
+		Type:       "string",
+		FieldNames: nil,
+		Schema:     nil,
+		Extra:      nil,
+	}
+
+	assert.Equal(t, expected, decoded)
 }
 
 func TestSchemaJSON_TagAsKeyYAML(t *testing.T) {
