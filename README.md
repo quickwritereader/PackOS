@@ -47,7 +47,10 @@ We gratefully acknowledge the following people for their contributions to this p
 ## Contributors
 - **Mikhail G. (heartical)**  
   - Role: Feature development (ADR 002 – Implicit Array Encoding)  
-  - GitHub: [heartical](https://github.com/heartical)  
+  - GitHub: [heartical](https://github.com/heartical)
+- **Mansur Manafov (sanslan)**
+  - ADR 001: Addressing the 13-bit Limit via Extended Containers (**experimental v2**)
+  - Github: [sanslan](https://github.com/sanslan)
 
 ---
 
